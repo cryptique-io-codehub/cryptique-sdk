@@ -2,7 +2,9 @@ const API_URL = 'https://cryptique-backend.vercel.app/api/sdk/track';
 const VERSION = 'v0.11.21';
 const CONSENT_STORAGE_KEY = 'mtm_consent';
 const USER_ID_KEY = 'mtm_user_id';
-const SITE_ID = 'abck-1234-dfdfdf-dfd-f-acbkdfc';
+const analyticsScript = document.currentScript || document.querySelector('script[src*="script.js"]');
+const SITE_ID = analyticsScript.getAttribute('site-id');
+
 
 // 💡 Initialize User Session Object
 let userSession = {
@@ -157,7 +159,7 @@ let sessionData = {
     isBounce: true,
     country: '', 
     device:getBrowserAndDeviceInfo().device,
-    browser:getBrowserAndDeviceInfo().browser
+ browser:getBrowserAndDeviceInfo().browser
     
 };
 let timer;

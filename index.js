@@ -4,7 +4,7 @@ const bodyParser = require("body-parser");
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-app.use(cors({ origin:[ "http://localhost:3000",process.env.CORS_ORIGIN] }));
+app.use(cors({ origin:[ "http://localhost:3000","https://cryptique.vercel.app"] }));
 app.use(bodyParser.json());
 
 app.get("/scripts/analytics/1.0.1/cryptique.script.min.js", (req, res) => {
