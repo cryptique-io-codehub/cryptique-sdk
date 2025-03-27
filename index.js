@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3002;
 app.use(cors({ origin:[ "http://localhost:3000",process.env.CORS_ORIGIN] }));
 app.use(bodyParser.json());
 
-app.get("/cryptique.script.min.js", (req, res) => {
+app.get("/scripts/analytics/1.0.1/cryptique.script.min.js", (req, res) => {
     //i dont want to show any blank spaces  in the content of the file
   res.sendFile(__dirname + "/script/script.js");
 });
