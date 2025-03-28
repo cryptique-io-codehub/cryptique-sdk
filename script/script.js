@@ -199,7 +199,24 @@ window.addEventListener('beforeunload', () => {
     sessionData.isBounce = sessionData.pagesViewed === 1;
     navigator.sendBeacon(API_URL, JSON.stringify(sessionData));
     clearInterval(timer);  // Stop the timer
-});
+});   
+ function setupWalletTracking() {
+    if (window.ethereum) {
+        window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+            if (accounts.length > 0) {
+                userSession.walletAddresses = accounts;
+            }
+        });
+
+        window.ethereum.on('accountsChanged', accounts => {
+            userSession.walletAddresses = accounts;
+        });
+
+        window.ethereum.on('chainChanged', chainId => {
+            userSession.chainId = chainId;
+        });
+    }
+}
 
 function trackEvent(eventType, eventData = {}) {
     userSession.country = getCountryName();
@@ -209,6 +226,9 @@ function trackEvent(eventType, eventData = {}) {
         sessionId: userSession.sessionId,
         type: eventType,
         pagePath: window.location.pathname,
+        walletAddresses: userSession.walletAddresses,
+        chainId: userSession.chainId,
+        walletsConnected: userSession.walletAddresses.length,
         eventData: {
             ...eventData,
             ...userSession.utmData,
@@ -226,11 +246,6 @@ function trackEvent(eventType, eventData = {}) {
         timestamp: new Date().toISOString(),
         version: VERSION
     };
-
-    // ✅ Display payload in the console before sending
-    // console.log('Payload:', JSON.stringify(payload, null, 2));
-    // console.log('User Session:', userSession);
-
     fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -244,6 +259,7 @@ function trackEvent(eventType, eventData = {}) {
 // 🚀 Initialization
 function initCryptiqueAnalytics() {
     getCountryName();
+    setupWalletTracking();
     trackPageView();
     startSessionTracking();
 }
