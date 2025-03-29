@@ -188,7 +188,7 @@ function startSessionTracking() {
             body: JSON.stringify({sessionData})
         })
         .then(res => res.json())
-        .then(res => console.log('Session sent:', res.message))
+        // .then(res => console.log('Session sent:', res.message))
         .catch(err => console.error('Error:', err));
     }, 5000);  // Send data every 5 seconds
 }
@@ -222,6 +222,7 @@ function trackEvent(eventType, eventData = {}) {
     userSession.country = getCountryName();
     const payload = {
         siteId: SITE_ID,
+        websiteUrl: window.location.href,
         userId: userSession.userId,
         sessionId: userSession.sessionId,
         type: eventType,
@@ -252,7 +253,7 @@ function trackEvent(eventType, eventData = {}) {
         body: JSON.stringify({ payload })
     })
         .then(res => res.json())
-        .then(result => console.log('API Response:', result))
+        // .then(result => console.log('API Response:', result))
         .catch(error => console.error('Error:', error));
 }
 
