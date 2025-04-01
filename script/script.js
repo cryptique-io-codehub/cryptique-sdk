@@ -227,7 +227,7 @@ function trackEvent(eventType, eventData = {}) {
         sessionId: userSession.sessionId,
         type: eventType,
         pagePath: window.location.pathname,
-        walletAddresses: userSession.walletAddresses,
+        // walletAddresses: userSession.walletAddresses,
         chainId: userSession.chainId,
         walletsConnected: userSession.walletAddresses.length,
         eventData: {
@@ -253,7 +253,7 @@ function trackEvent(eventType, eventData = {}) {
         body: JSON.stringify({ payload })
     })
         .then(res => res.json())
-        // .then(result => console.log('API Response:', result))
+        .then(result => console.log('API Response:', result))
         .catch(error => console.error('Error:', error));
 }
 
