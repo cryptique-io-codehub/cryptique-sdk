@@ -171,10 +171,11 @@ let sessionData = {
   utmData: getUTMParameters(),
   pagePath: window.location.pathname,
   startTime: new Date().toISOString(),
-  walletAddresses: [],
-  walletType: detectWalletType(),
-  chainId: 2,
-  chainName: "",
+  wallet:{
+    walletAddress: [],
+    walletType: "",
+    chainName: "",
+      },
   endTime: null,
   pagesViewed: 0,
   duration: 0,
@@ -208,8 +209,9 @@ function startSessionTracking() {
     );
     sessionData.isBounce = sessionData.pagesViewed === 1;
     setupWalletTracking();
-    sessionData.chainName = chainName;
-    sessionData.walletAddresses = userSession.walletAddresses;
+    sessionData.wallet.chainName = chainName;
+    sessionData.wallet.walletAddress = userSession.walletAddresses;
+    sessionData.wallet.walletType = detectWalletType();
     console.log("Session Data:", sessionData);
     fetch(API_URL, {
       method: "POST",
@@ -240,14 +242,6 @@ function setupWalletTracking() {
           userSession.walletAddresses = accounts;
         }
       });
-
-    window.ethereum.on("accountsChanged", (accounts) => {
-      userSession.walletAddresses = accounts;
-    });
-
-    window.ethereum.on("chainChanged", (chainId) => {
-      userSession.chainId = chainId;
-    });
   }
 }
 function detectWallets() {
@@ -398,9 +392,7 @@ function trackEvent(eventType, eventData = {}) {
     sessionId: userSession.sessionId,
     type: eventType,
     pagePath: window.location.pathname,
-    walletAddresses: userSession.walletAddresses,
     isWeb3User: detectWallets(),
-    walletsConnected: userSession.walletAddresses.length,
     eventData: {
       ...eventData,
       ...userSession.utmData,
@@ -438,6 +430,5 @@ function initCryptiqueAnalytics() {
 
 // Start Analytics
 loadWeb3Script(() => {
-  console.log("Web3 loaded");
   initCryptiqueAnalytics();
 });
