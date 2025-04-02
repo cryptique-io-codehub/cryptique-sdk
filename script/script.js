@@ -5,7 +5,18 @@ const USER_ID_KEY = 'mtm_user_id';
 const analyticsScript = document.currentScript || document.querySelector('script[src*="script.js"]');
 const SITE_ID = analyticsScript.getAttribute('site-id');
 
+function loadWeb3Script(callback) {
+    if (typeof Web3 !== 'undefined') {
+        callback(); // Web3 is already loaded, proceed
+        return;
+    }
 
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/web3/4.4.0/web3.min.js";
+    script.type = "text/javascript";
+    script.onload = callback; // Run callback after Web3 loads
+    document.head.appendChild(script);
+}
 // 💡 Initialize User Session Object
 let userSession = {
     siteId: SITE_ID,
@@ -155,6 +166,9 @@ let sessionData = {
     pagePath: window.location.pathname,
     startTime: new Date().toISOString(),
     walletAddresses:[],
+    walletType:detectWalletType(),
+    chainId: 2,
+    chainName: "",
     endTime: null,
     pagesViewed: 0,
     duration: 0,
@@ -180,19 +194,25 @@ function startSessionTracking() {
     sessionData.pagesViewed++;
     sessionData.country = countryName;
     timer = setInterval(() => {
+        let chainName = "";
+    async () => {
+         chainName = await detectChainName();
+    }
         const currentTime = new Date();
         sessionData.endTime = currentTime.toISOString();
         sessionData.duration = Math.round((currentTime - new Date(sessionData.startTime)) / 1000);
         sessionData.isBounce = sessionData.pagesViewed === 1;
         setupWalletTracking();
+        sessionData.chainName = chainName;
         sessionData.walletAddresses=userSession.walletAddresses;
+        console.log('Session Data:', sessionData);
         fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({sessionData})
         })
         .then(res => res.json())
-        .then(res => console.log('Session sent:', res))
+        // .then(res => console.log('Session sent:', res))
         .catch(err => console.error('Error:', err));
     }, 5000);  // Send data every 5 seconds
 }
@@ -222,20 +242,111 @@ window.addEventListener('beforeunload', () => {
     }
 }
 function detectWallets() {
-    const wallets = [];
-
-    if (!!window.ethereum && !!window.ethereum.isMetaMask) wallets.push("metamask");
-    if (!!window.ethereum && !!window.ethereum.isCoinbaseWallet) wallets.push("coinbase");
-    if (!!window.walletConnect) wallets.push("walletconnect");
-    if (!!window.trustwallet) wallets.push("trustwallet");
-    if (!!window.ethereum && window.navigator.brave) wallets.push("brave");
-    if (!!window.ethereum && !!window.ethereum.isFrame) wallets.push("frame");
-    if (!!window.solana && window.solana.isPhantom) wallets.push("phantom");
-    if (!!window.tronWeb && window.tronWeb.defaultAddress) wallets.push("tronlink");
-
-    return wallets;
+    let detectedWallets = []; // Array to store detected wallet names.
+    if (window.ethereum) {
+        // Check for specific wallet properties to identify them.
+        if(window.ethereum.isMetaMask) {detectedWallets.push("MetaMask");}
+        if(window.ethereum.isTrustWallet) {detectedWallets.push("Trust Wallet");}
+        if(window.ethereum.isCoinbaseWallet) {detectedWallets.push("Coinbase Wallet");}
+        if(window.ethereum.isBraveWallet) {detectedWallets.push("Brave Wallet");}
+        if(window.ethereum.isFrame) {detectedWallets.push("Frame");}
+        if(window.ethereum.isPhantom) {detectedWallets.push("Phantom");}
+        if(window.ethereum.isTronLink) {detectedWallets.push("TronLink");}
+//return a boolean value if the wallet is detected
+        return detectedWallets.length > 0;
+    }
 }
+function detectWalletType() {
+    if (window.ethereum) {
+        if (window.ethereum.isMetaMask) {
+            return 'MetaMask';
+        } else if (window.ethereum.isTrustWallet) {
+            return 'Trust Wallet';
+        } else if (window.ethereum.isCoinbaseWallet) {
+            return 'Coinbase Wallet';
+        } else if (window.ethereum.isBraveWallet) {
+            return 'Brave Wallet';
+        } else if (window.ethereum.isFrame) {
+            return 'Frame';
+        } else if (window.ethereum.isPhantom) {
+            return 'Phantom';
+        } else if (window.ethereum.isTronLink) {
+            return 'TronLink';
+        } else {
+            return 'Unknown Wallet';
+        }
+    } else {
+        return 'No Wallet Detected';
+    }
+}
+function detectChainId() {  
+    if (window.ethereum) {
+        return window.ethereum.chainId;
+    } else {
+        return 'No Wallet Detected';
+    }
+}
+async function detectEthereumProvider(){
+    if (window.ethereum) {
+        // Modern Web3 wallets.
+        return window.ethereum;
+    } else if (window.web3){
+        // Legacy Web3 wallets.
+        return window.web3.currentProvider;
+    }else{
+        // No provider found.
+        return null;
+    }
+}
+async function detectChainName() {
+    try {
+        const provider = await detectEthereumProvider();
+        if (!provider) {
+            return 'No Wallet Detected';
+        }
 
+        // Request access to the user's accounts.
+        await provider.request({ method: 'eth_requestAccounts' });
+
+        // Ensure Web3 is available
+        if (typeof Web3 === 'undefined') {
+            return 'Web3 is not defined';
+        }
+
+        // Initialize Web3 with the provider.
+        const web3 = new Web3(provider);
+
+        // Get the connected accounts.
+        const accounts = await web3.eth.getAccounts();
+        if (accounts.length === 0) {
+            return 'No accounts found';
+        }
+
+        // Get the network ID (chain ID).
+        const networkId = await web3.eth.net.getId();
+        let chainName = "Unknown";
+
+        // Map network IDs to chain names.
+        switch (networkId) {
+            case 1: chainName = "Ethereum Mainnet"; break;
+            case 56: chainName = "Binance Smart Chain"; break;
+            case 137: chainName = "Polygon"; break;
+            case 10: chainName = "Optimism"; break;
+            case 42161: chainName = "Arbitrum One"; break;
+            case 250: chainName = "Fantom Opera"; break;
+            case 43114: chainName = "Avalanche"; break;
+            case 100: chainName = "xDai"; break;
+            case 1313161554: chainName = "Aurora"; break;
+            default: chainName = `Unknown (ID: ${networkId})`;
+        }
+
+        return chainName;
+    } catch (error) {
+        console.error('Error detecting chain name:', error);
+        return 'Error';
+    }
+}
+    
 function trackEvent(eventType, eventData = {}) {
     userSession.country = getCountryName();
     const payload = {
@@ -246,7 +357,7 @@ function trackEvent(eventType, eventData = {}) {
         type: eventType,
         pagePath: window.location.pathname,
         walletAddresses: userSession.walletAddresses,
-        chainId: userSession.chainId,
+        isWeb3User: detectWallets(),
         walletsConnected: userSession.walletAddresses.length,
         eventData: {
             ...eventData,
@@ -284,4 +395,7 @@ function initCryptiqueAnalytics() {
 }
 
 // Start Analytics
-initCryptiqueAnalytics();
+loadWeb3Script(() => {
+    console.log('Web3 loaded');
+    initCryptiqueAnalytics();
+});
