@@ -195,9 +195,9 @@ function startSessionTracking() {
     sessionData.country = countryName;
     timer = setInterval(() => {
         let chainName = "";
-    async () => {
-         chainName = await detectChainName();
-    }
+    
+         chainName =  detectChainName();
+    
         const currentTime = new Date();
         sessionData.endTime = currentTime.toISOString();
         sessionData.duration = Math.round((currentTime - new Date(sessionData.startTime)) / 1000);
