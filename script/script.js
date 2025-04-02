@@ -203,7 +203,7 @@ window.addEventListener('beforeunload', () => {
 });   
  function setupWalletTracking() {
     if (window.ethereum) {
-        window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+        window.ethereum.request({ method: 'eth_requestAccounts' }).then(accounts => {
             if (accounts.length > 0) {
                 userSession.walletAddresses = accounts;
             }
@@ -218,6 +218,20 @@ window.addEventListener('beforeunload', () => {
         });
     }
 }
+function detectWallets() {
+    const wallets = [];
+
+    if (!!window.ethereum && !!window.ethereum.isMetaMask) wallets.push("metamask");
+    if (!!window.ethereum && !!window.ethereum.isCoinbaseWallet) wallets.push("coinbase");
+    if (!!window.walletConnect) wallets.push("walletconnect");
+    if (!!window.trustwallet) wallets.push("trustwallet");
+    if (!!window.ethereum && window.navigator.brave) wallets.push("brave");
+    if (!!window.ethereum && !!window.ethereum.isFrame) wallets.push("frame");
+    if (!!window.solana && window.solana.isPhantom) wallets.push("phantom");
+    if (!!window.tronWeb && window.tronWeb.defaultAddress) wallets.push("tronlink");
+
+    return wallets;
+}
 
 function trackEvent(eventType, eventData = {}) {
     userSession.country = getCountryName();
@@ -228,7 +242,7 @@ function trackEvent(eventType, eventData = {}) {
         sessionId: userSession.sessionId,
         type: eventType,
         pagePath: window.location.pathname,
-        // walletAddresses: userSession.walletAddresses,
+        walletAddresses: userSession.walletAddresses,
         chainId: userSession.chainId,
         walletsConnected: userSession.walletAddresses.length,
         eventData: {
@@ -260,8 +274,8 @@ function trackEvent(eventType, eventData = {}) {
 
 // 🚀 Initialization
 function initCryptiqueAnalytics() {
+    setupWalletTracking();
     getCountryName();
-    // setupWalletTracking();
     trackPageView();
     startSessionTracking();
 }
