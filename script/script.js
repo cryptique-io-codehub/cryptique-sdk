@@ -214,14 +214,14 @@ function startSessionTracking() {
     sessionData.wallet.walletAddress = userSession.walletAddresses[0];
     }
     sessionData.wallet.walletType = detectWalletType();
-    console.log("Session Data:", sessionData);
+    // console.log("Session Data:", sessionData);
     fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionData }),
     })
       .then((res) => res.json())
-      // .then(res => console.log('Session sent:', res))
+      .then(res => console.log('Session sent:', res))
       .catch((err) => console.error("Error:", err));
   }, 5000); // Send data every 5 seconds
 }
