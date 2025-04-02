@@ -172,7 +172,7 @@ let sessionData = {
   pagePath: window.location.pathname,
   startTime: new Date().toISOString(),
   wallet:{
-    walletAddress: [],
+    walletAddress: "",
     walletType: "",
     chainName: "",
       },
@@ -210,7 +210,9 @@ function startSessionTracking() {
     sessionData.isBounce = sessionData.pagesViewed === 1;
     setupWalletTracking();
     sessionData.wallet.chainName = chainName;
-    sessionData.wallet.walletAddress = userSession.walletAddresses;
+    if (userSession.walletAddresses.length > 0) {
+    sessionData.wallet.walletAddress = userSession.walletAddresses[0];
+    }
     sessionData.wallet.walletType = detectWalletType();
     console.log("Session Data:", sessionData);
     fetch(API_URL, {
