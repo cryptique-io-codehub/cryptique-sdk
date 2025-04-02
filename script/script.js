@@ -192,7 +192,7 @@ function startSessionTracking() {
             body: JSON.stringify({sessionData})
         })
         .then(res => res.json())
-        .then(res => console.log('Session sent:', res.message))
+        .then(res => console.log('Session sent:', res))
         .catch(err => console.error('Error:', err));
     }, 5000);  // Send data every 5 seconds
 }
