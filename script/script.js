@@ -154,6 +154,7 @@ let sessionData = {
     utmData: getUTMParameters(),
     pagePath: window.location.pathname,
     startTime: new Date().toISOString(),
+    walletAddresses:[],
     endTime: null,
     pagesViewed: 0,
     duration: 0,
@@ -183,13 +184,15 @@ function startSessionTracking() {
         sessionData.endTime = currentTime.toISOString();
         sessionData.duration = Math.round((currentTime - new Date(sessionData.startTime)) / 1000);
         sessionData.isBounce = sessionData.pagesViewed === 1;
+        setupWalletTracking();
+        sessionData.walletAddresses=userSession.walletAddresses;
         fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({sessionData})
         })
         .then(res => res.json())
-        // .then(res => console.log('Session sent:', res.message))
+        .then(res => console.log('Session sent:', res.message))
         .catch(err => console.error('Error:', err));
     }, 5000);  // Send data every 5 seconds
 }
