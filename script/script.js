@@ -260,7 +260,7 @@ function trackEvent(eventType, eventData = {}) {
 // 🚀 Initialization
 function initCryptiqueAnalytics() {
     getCountryName();
-    setupWalletTracking();
+    // setupWalletTracking();
     trackPageView();
     startSessionTracking();
 }
