@@ -152,6 +152,7 @@ let sessionData = {
     siteId: SITE_ID,
     referrer: document.referrer || 'direct',
     utmData: getUTMParameters(),
+    pagePath: window.location.pathname,
     startTime: new Date().toISOString(),
     endTime: null,
     pagesViewed: 0,
