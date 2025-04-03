@@ -173,6 +173,7 @@ function trackPageView() {
 let sessionData = {
   sessionId: generateSessionId(),
   siteId: SITE_ID,
+  userId: userSession.userId,
   referrer: document.referrer || "direct",
   utmData: getUTMParameters(),
   pagePath: window.location.pathname,
