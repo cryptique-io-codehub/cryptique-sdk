@@ -71,22 +71,22 @@ function setTrackingConsent(consent) {
 
 function getUTMParameters() {
   const utmParams = [
-    "source",
-    "medium",
-    "campaign",
-    "term",
-    "content",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
   ];
   let storedUTM = {};
   utmParams.forEach((param) => {
     storedUTM[param] = localStorage.getItem(param) || "";
   });
   return {
-    source: storedUTM["source"],
-    medium: storedUTM["medium"],
-    campaign: storedUTM["campaign"],
-    term: storedUTM["term"],
-    content: storedUTM["content"],
+    source: storedUTM["utm_source"],
+    medium: storedUTM["utm_medium"],
+    campaign: storedUTM["utm_campaign"],
+    term: storedUTM["utm_term"],
+    content: storedUTM["utm_content"],
   };
 }
 
