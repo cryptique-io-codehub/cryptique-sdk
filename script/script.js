@@ -71,17 +71,23 @@ function setTrackingConsent(consent) {
 
 function getUTMParameters() {
   const utmParams = [
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
+    "source",
+    "medium",
+    "campaign",
+    "term",
+    "content",
   ];
   let storedUTM = {};
   utmParams.forEach((param) => {
     storedUTM[param] = localStorage.getItem(param) || "";
   });
-  return storedUTM;
+  return {
+    source: storedUTM["source"],
+    medium: storedUTM["medium"],
+    campaign: storedUTM["campaign"],
+    term: storedUTM["term"],
+    content: storedUTM["content"],
+  };
 }
 
 function getStoredReferrer() {
@@ -395,6 +401,7 @@ function trackEvent(eventType, eventData = {}) {
     type: eventType,
     pagePath: window.location.pathname,
     isWeb3User: detectWallets(),
+
     eventData: {
       ...eventData,
       ...userSession.utmData,
