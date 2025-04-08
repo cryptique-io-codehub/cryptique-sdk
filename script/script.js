@@ -194,10 +194,10 @@ let sessionData = {
 let timer;
 let countryName;
 function getCountryName() {
-  fetch("https://ipapi.co/json/")
+  fetch("https://ipinfo.io/14.139.196.236?token=05d7fac5c0c506")
     .then((res) => res.json())
     .then((data) => {
-      countryName = data.country_name;
+      countryName = data.country;
       sessionData.country = countryName;
     })
     .catch((err) => console.error("Error:", err));
