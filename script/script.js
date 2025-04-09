@@ -222,7 +222,6 @@ function startSessionTracking() {
     sessionData.duration = Math.round(
       (currentTime - new Date(sessionData.startTime)) / 1000
     );
-    sessionData.isBounce = sessionData.pagesViewed === 1;
     setupWalletTracking();
     sessionData.wallet.chainName = chainName;
     if (userSession.walletAddresses.length > 0) {
@@ -440,10 +439,10 @@ function trackEvent(eventType, eventData = {}) {
 
 // 🚀 Initialization
 function initCryptiqueAnalytics() {
-  setupWalletTracking();
-  getCountryName();
+    setupWalletTracking();
+    getCountryName();
+    startSessionTracking();
   trackPageView();
-  startSessionTracking();
 }
 
 // Start Analytics
