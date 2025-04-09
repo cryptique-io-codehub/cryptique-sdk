@@ -70,25 +70,33 @@ function setTrackingConsent(consent) {
 }
 
 function getUTMParameters() {
-  const utmParams = [
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-  ];
-  let storedUTM = {};
-  utmParams.forEach((param) => {
-    storedUTM[param] = localStorage.getItem(param) || "";
-  });
-  return {
-    source: storedUTM["utm_source"],
-    medium: storedUTM["utm_medium"],
-    campaign: storedUTM["utm_campaign"],
-    term: storedUTM["utm_term"],
-    content: storedUTM["utm_content"],
-  };
-}
+    const utmParams = [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+    ];
+  
+    const urlParams = new URLSearchParams(window.location.search);
+    let storedUTM = {};
+  
+    utmParams.forEach(param => {
+      const value = urlParams.get(param);
+      if (value) {
+        storedUTM[param] = value;
+      }
+    });
+  
+    return {
+      source: storedUTM["utm_source"] || null,
+      medium: storedUTM["utm_medium"] || null,
+      campaign: storedUTM["utm_campaign"] || null,
+      term: storedUTM["utm_term"] || null,
+      content: storedUTM["utm_content"] || null,
+    };
+  }
+  
 
 function getStoredReferrer() {
   return localStorage.getItem("referrer") || document.referrer;
