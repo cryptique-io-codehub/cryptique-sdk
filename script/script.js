@@ -431,7 +431,7 @@ function trackEvent(eventType, eventData = {}) {
   fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify({ payload ,sessionData}),
   })
     .then((res) => res.json())
     .then((result) => console.log("API Response:", result))
