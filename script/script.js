@@ -132,7 +132,7 @@ let sessionData = {
   sessionId: generateSessionId(), // Temporary ID
   siteId: SITE_ID,
   userId: userSession.userId,
-  referrer: document.referrer || "direct",
+  referrer: "direct", // Default to "direct" when no referrer
   utmData: getUTMParameters(),
   pagePath: window.location.pathname,
   startTime: new Date().toISOString(),
@@ -149,7 +149,8 @@ let sessionData = {
   device: getBrowserAndDeviceInfo().device,
   browser: getBrowserAndDeviceInfo().browser,
   pageVisits: [],
-  lastActivity: Date.now()
+  lastActivity: Date.now(),
+  isFirstPage: true // Track if this is the first page in the session
 };
 
 function getCountryName() {
@@ -161,6 +162,19 @@ function getCountryName() {
     })
     .catch((err) => console.error("Error:", err));
   return countryName;
+}
+
+// Function to get the proper referrer, prioritizing UTM data
+function getProperReferrer() {
+  const utmData = getUTMParameters();
+  
+  // If UTM source exists, use it as the primary source
+  if (utmData.source) {
+    return document.referrer || "direct"; // Still store the actual referrer
+  }
+  
+  // If no UTM, use the referrer or "direct"
+  return document.referrer || "direct";
 }
 
 function getOrCreateSessionId() {
@@ -175,10 +189,31 @@ function getOrCreateSessionId() {
         session.lastActivity = now;
         sessionStorage.setItem('cryptique_session', JSON.stringify(session));
         
-        // If we have existing pageVisits data, load it
-        if (session.sessionData && session.sessionData.pageVisits) {
-          sessionData.pageVisits = session.sessionData.pageVisits;
-          sessionData.pagesViewed = session.sessionData.pageVisits.length;
+        // If we have existing session data, load it
+        if (session.sessionData) {
+          // Copy all the data except current page-specific data
+          if (session.sessionData.pageVisits) {
+            sessionData.pageVisits = session.sessionData.pageVisits;
+            sessionData.pagesViewed = session.sessionData.pageVisits.length;
+          }
+          
+          // Keep the original startTime from the first page
+          if (session.sessionData.startTime) {
+            sessionData.startTime = session.sessionData.startTime;
+          }
+          
+          // Keep the original referrer from the first page
+          if (session.sessionData.referrer) {
+            sessionData.referrer = session.sessionData.referrer;
+          }
+          
+          // Keep the original UTM data from the first page
+          if (session.sessionData.utmData) {
+            sessionData.utmData = session.sessionData.utmData;
+          }
+          
+          // Mark that this is not the first page in the session
+          sessionData.isFirstPage = false;
         }
         
         return session.id;
@@ -188,6 +223,10 @@ function getOrCreateSessionId() {
     // Create a new session ID if none exists or timeout expired
     const newSessionId = generateSessionId();
     
+    // For a new session, set the correct referrer
+    sessionData.referrer = getProperReferrer();
+    sessionData.isFirstPage = true;
+    
     // Initialize with empty pageVisits array
     sessionStorage.setItem('cryptique_session', JSON.stringify({
       id: newSessionId,
@@ -195,7 +234,10 @@ function getOrCreateSessionId() {
       pageViews: 0,
       lastPath: window.location.pathname + window.location.search,
       sessionData: {
-        pageVisits: []
+        pageVisits: [],
+        startTime: sessionData.startTime,
+        referrer: sessionData.referrer,
+        utmData: sessionData.utmData
       }
     }));
     
@@ -304,7 +346,10 @@ function trackPageVisit() {
         pageViews: 0,
         lastPath: currentPath,
         sessionData: {
-          pageVisits: []
+          pageVisits: [],
+          startTime: sessionData.startTime,
+          referrer: sessionData.referrer,
+          utmData: sessionData.utmData
         }
       };
       sessionStorage.setItem('cryptique_session', JSON.stringify(initialSessionData));
@@ -315,7 +360,10 @@ function trackPageVisit() {
     // Ensure sessionData exists in the session object
     if (!session.sessionData) {
       session.sessionData = {
-        pageVisits: []
+        pageVisits: [],
+        startTime: sessionData.startTime,
+        referrer: sessionData.referrer,
+        utmData: sessionData.utmData
       };
     }
     
@@ -351,14 +399,22 @@ function trackPageVisit() {
       // Sync with our working sessionData object
       sessionData.pageVisits = session.sessionData.pageVisits;
       sessionData.pagesViewed = session.sessionData.pageVisits.length;
-      sessionData.isBounce = sessionData.pagesViewed <= 1;
+      sessionData.isBounce = session.sessionData.pageVisits.length <= 1;
     }
     
     // Always update activity time
     session.lastActivity = Date.now();
     sessionData.lastActivity = Date.now();
     
-    // Save updated session
+    // Save updated session - make sure to preserve the original startTime and referrer
+    if (!session.sessionData.startTime) {
+      session.sessionData.startTime = sessionData.startTime;
+    }
+    
+    if (!session.sessionData.referrer) {
+      session.sessionData.referrer = sessionData.referrer;
+    }
+    
     sessionStorage.setItem('cryptique_session', JSON.stringify(session));
   } catch (error) {
     console.error("Error in trackPageVisit:", error);
@@ -371,13 +427,20 @@ function startSessionTracking() {
     if (!sessionStorage.getItem('cryptique_session')) {
       const currentPath = window.location.pathname + window.location.search;
       
+      // For a new session, set the correct referrer
+      sessionData.referrer = getProperReferrer();
+      sessionData.isFirstPage = true;
+      
       sessionStorage.setItem('cryptique_session', JSON.stringify({
         id: sessionData.sessionId,
         lastActivity: Date.now(),
         pageViews: 0,
         lastPath: currentPath,
         sessionData: {
-          pageVisits: []
+          pageVisits: [],
+          startTime: sessionData.startTime,
+          referrer: sessionData.referrer,
+          utmData: sessionData.utmData
         }
       }));
     }
@@ -388,10 +451,28 @@ function startSessionTracking() {
       const session = JSON.parse(sessionStr);
       
       // Sync session data with our working object
-      if (session.sessionData && session.sessionData.pageVisits) {
-        sessionData.pageVisits = session.sessionData.pageVisits;
-        sessionData.pagesViewed = session.sessionData.pageVisits.length;
-        sessionData.isBounce = sessionData.pagesViewed <= 1;
+      if (session.sessionData) {
+        // Keep original startTime from first page
+        if (session.sessionData.startTime) {
+          sessionData.startTime = session.sessionData.startTime;
+        }
+        
+        // Keep original referrer from first page
+        if (session.sessionData.referrer) {
+          sessionData.referrer = session.sessionData.referrer;
+        }
+        
+        // Keep the original UTM data from the first page
+        if (session.sessionData.utmData) {
+          sessionData.utmData = session.sessionData.utmData;
+        }
+        
+        if (session.sessionData.pageVisits) {
+          sessionData.pageVisits = session.sessionData.pageVisits;
+          sessionData.pagesViewed = session.sessionData.pageVisits.length;
+          sessionData.isBounce = sessionData.pagesViewed <= 1;
+          sessionData.isFirstPage = sessionData.pageVisits.length === 0;
+        }
       }
     }
     
@@ -417,13 +498,31 @@ function startSessionTracking() {
         if (sessionStr) {
           const currentSession = JSON.parse(sessionStr);
           if (currentSession && currentSession.sessionData) {
-            sessionData.pageVisits = currentSession.sessionData.pageVisits;
-            sessionData.pagesViewed = currentSession.sessionData.pageVisits.length;
-            sessionData.isBounce = sessionData.pagesViewed <= 1;
+            // Keep original startTime from first page
+            if (currentSession.sessionData.startTime) {
+              sessionData.startTime = currentSession.sessionData.startTime;
+            }
+            
+            // Keep original referrer from first page
+            if (currentSession.sessionData.referrer) {
+              sessionData.referrer = currentSession.sessionData.referrer;
+            }
+            
+            // Keep the original UTM data
+            if (currentSession.sessionData.utmData) {
+              sessionData.utmData = currentSession.sessionData.utmData;
+            }
+            
+            // Update page count data
+            if (currentSession.sessionData.pageVisits) {
+              sessionData.pageVisits = currentSession.sessionData.pageVisits;
+              sessionData.pagesViewed = currentSession.sessionData.pageVisits.length;
+              sessionData.isBounce = sessionData.pagesViewed <= 1;
+            }
           }
         }
         
-        // Update timestamps and duration
+        // Update timestamps and duration - only endTime, not startTime
         const currentTime = new Date();
         sessionData.endTime = currentTime.toISOString();
         sessionData.duration = Math.round(
@@ -452,14 +551,17 @@ function startSessionTracking() {
         // Update activity time
         sessionData.lastActivity = Date.now();
         
-        // Update session storage with latest data
+        // Update session storage with latest data - preserve original startTime and referrer
         const updatedSession = {
           id: sessionData.sessionId,
           lastActivity: Date.now(),
           pageViews: sessionData.pagesViewed,
           lastPath: window.location.pathname + window.location.search,
           sessionData: {
-            pageVisits: sessionData.pageVisits
+            pageVisits: sessionData.pageVisits,
+            startTime: sessionData.startTime,
+            referrer: sessionData.referrer,
+            utmData: sessionData.utmData
           }
         };
         
@@ -530,34 +632,48 @@ window.addEventListener("beforeunload", () => {
         const session = JSON.parse(storedSession);
         
         // Sync page visits and counts from session storage
-        if (session.sessionData && session.sessionData.pageVisits) {
-          sessionData.pageVisits = session.sessionData.pageVisits;
-          sessionData.pagesViewed = session.sessionData.pageVisits.length;
+        if (session.sessionData) {
+          // Keep the original startTime from the first page
+          if (session.sessionData.startTime) {
+            sessionData.startTime = session.sessionData.startTime;
+          }
+          
+          // Keep the original referrer from the first page
+          if (session.sessionData.referrer) {
+            sessionData.referrer = session.sessionData.referrer;
+          }
+          
+          // Keep the original UTM data
+          if (session.sessionData.utmData) {
+            sessionData.utmData = session.sessionData.utmData;
+          }
+          
+          if (session.sessionData.pageVisits) {
+            sessionData.pageVisits = session.sessionData.pageVisits;
+            sessionData.pagesViewed = session.sessionData.pageVisits.length;
+          }
         }
       } catch (parseError) {
         console.error("Error parsing stored session:", parseError);
       }
     }
     
-    // Update timestamps and duration
+    // Update endTime and duration - leave startTime unchanged
     const currentTime = new Date();
     sessionData.endTime = currentTime.toISOString();
     
-    // Calculate duration only if startTime exists and is valid
-    if (sessionData.startTime) {
-      try {
-        sessionData.duration = Math.round(
-          (currentTime - new Date(sessionData.startTime)) / 1000
-        );
-      } catch (durationError) {
-        console.error("Error calculating duration:", durationError);
-        sessionData.duration = 0;
-      }
-    } else {
+    // Calculate duration from original startTime to now
+    try {
+      const startTimeDate = new Date(sessionData.startTime);
+      sessionData.duration = Math.round(
+        (currentTime - startTimeDate) / 1000
+      );
+    } catch (durationError) {
+      console.error("Error calculating duration:", durationError);
       sessionData.duration = 0;
     }
     
-    // Set bounce flag
+    // Set bounce flag based on page count
     sessionData.isBounce = sessionData.pagesViewed <= 1;
     
     // Update wallet info if available
