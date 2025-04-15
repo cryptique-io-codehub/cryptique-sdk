@@ -431,6 +431,10 @@ function startSessionTracking() {
       sessionData.referrer = getProperReferrer();
       sessionData.isFirstPage = true;
       
+      // Increment the session count in localStorage
+      const sessionCount = parseInt(localStorage.getItem('cryptique_session_count') || '0', 10);
+      localStorage.setItem('cryptique_session_count', (sessionCount + 1).toString());
+      
       sessionStorage.setItem('cryptique_session', JSON.stringify({
         id: sessionData.sessionId,
         lastActivity: Date.now(),
@@ -886,6 +890,12 @@ function trackEvent(eventType, eventData = {}) {
     sessionStorage.setItem('cryptique_session', JSON.stringify(session));
   }
   
+  // Calculate session count from localStorage (we'll store this in localStorage to persist across page refreshes)
+  let sessionCount = parseInt(localStorage.getItem('cryptique_session_count') || '1', 10);
+  
+  // Calculate current session duration
+  const currentSessionDuration = Date.now() - userSession.sessionStart;
+  
   const payload = {
     siteId: SITE_ID,
     websiteUrl: window.location.href,
@@ -899,8 +909,9 @@ function trackEvent(eventType, eventData = {}) {
       ...eventData,
       ...userSession.utmData,
       referrer: userSession.referrer,
-      sessionDuration: Date.now() - userSession.sessionStart,
-      pagesPerVisit: sessionData.pagesViewed || userSession.pagesPerVisit,
+      sessionDuration: currentSessionDuration,
+      pagesPerVisit: (sessionData.pagesViewed || userSession.pagesPerVisit) / sessionCount,
+      avgSessionDuration: sessionData.duration || Math.round(currentSessionDuration / 1000),
       isBounce: sessionData.pagesViewed <= 1,
       browser: userSession.browser,
       os: userSession.os,
@@ -908,7 +919,8 @@ function trackEvent(eventType, eventData = {}) {
       resolution: userSession.resolution,
       language: userSession.language,
       country: userSession.country,
-      pageVisits: sessionData.pageVisits
+      pageVisits: sessionData.pageVisits,
+      sessionCount: sessionCount
     },
     timestamp: new Date().toISOString(),
     version: VERSION,
