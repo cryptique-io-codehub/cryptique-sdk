@@ -1,3 +1,4 @@
+// Small edit to trigger Vercel build
 const API_URL = "https://cryptique-backend.vercel.app/api/sdk/track";
 const VERSION = "v0.11.21";
 const CONSENT_STORAGE_KEY = "mtm_consent";
