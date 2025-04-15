@@ -6,43 +6,9 @@ const analyticsScript =
   document.currentScript || document.querySelector('script[src*="script.js"]');
 const SITE_ID = analyticsScript.getAttribute("site-id");
 
-function loadWeb3Script(callback) {
-  if (typeof Web3 !== "undefined") {
-    callback(); // Web3 is already loaded, proceed
-    return;
-  }
-
-  const script = document.createElement("script");
-  script.src = "https://cdnjs.cloudflare.com/ajax/libs/web3/4.4.0/web3.min.js";
-  script.type = "text/javascript";
-  script.onload = callback; // Run callback after Web3 loads
-  document.head.appendChild(script);
-}
-// 💡 Initialize User Session Object
-let userSession = {
-  siteId: SITE_ID,
-  sessionId: generateSessionId(),
-  userId: getOrCreateUserId(),
-  sessionStart: Date.now(),
-  sessionEnd: null,
-  pagesPerVisit: 0,
-  isBounce: true,
-  userAgent: navigator.userAgent,
-  language: navigator.language,
-  referrer: getStoredReferrer(),
-  resolution: `${window.screen.width}x${window.screen.height}`,
-  consentGiven: getTrackingConsent(),
-  walletAddresses: [],
-  chainId: null,
-  provider: null,
-  utmData: getUTMParameters(),
-  browser: getBrowserAndDeviceInfo().browser,
-  os: getBrowserAndDeviceInfo().device.os,
-  device: getBrowserAndDeviceInfo().device,
-
-  country: null,
-};
-//countryName
+// Initialize variables needed for session tracking
+let timer;
+let countryName;
 
 // 🚀 Utility Functions
 function generateSessionId() {
@@ -95,12 +61,12 @@ function getUTMParameters() {
       term: storedUTM["utm_term"] || null,
       content: storedUTM["utm_content"] || null,
     };
-  }
-  
+}
 
 function getStoredReferrer() {
   return localStorage.getItem("referrer") || document.referrer;
 }
+
 function getBrowserAndDeviceInfo() {
   const userAgent = navigator.userAgent;
   let deviceType = "desktop";
@@ -123,6 +89,135 @@ function getBrowserAndDeviceInfo() {
     },
   };
 }
+
+function loadWeb3Script(callback) {
+  if (typeof Web3 !== "undefined") {
+    callback(); // Web3 is already loaded, proceed
+    return;
+  }
+
+  const script = document.createElement("script");
+  script.src = "https://cdnjs.cloudflare.com/ajax/libs/web3/4.4.0/web3.min.js";
+  script.type = "text/javascript";
+  script.onload = callback; // Run callback after Web3 loads
+  document.head.appendChild(script);
+}
+
+// Initialize user session data
+let userSession = {
+  siteId: SITE_ID,
+  sessionId: generateSessionId(),
+  userId: getOrCreateUserId(),
+  sessionStart: Date.now(),
+  sessionEnd: null,
+  pagesPerVisit: 0,
+  isBounce: true,
+  userAgent: navigator.userAgent,
+  language: navigator.language,
+  referrer: getStoredReferrer(),
+  resolution: `${window.screen.width}x${window.screen.height}`,
+  consentGiven: getTrackingConsent(),
+  walletAddresses: [],
+  chainId: null,
+  provider: null,
+  utmData: getUTMParameters(),
+  browser: getBrowserAndDeviceInfo().browser,
+  os: getBrowserAndDeviceInfo().device.os,
+  device: getBrowserAndDeviceInfo().device,
+  country: null,
+};
+
+// Pre-initialize sessionData with a temporary ID (will be updated later)
+let sessionData = {
+  sessionId: generateSessionId(), // Temporary ID
+  siteId: SITE_ID,
+  userId: userSession.userId,
+  referrer: document.referrer || "direct",
+  utmData: getUTMParameters(),
+  pagePath: window.location.pathname,
+  startTime: new Date().toISOString(),
+  wallet:{
+    walletAddress: "",
+    walletType: "",
+    chainName: "",
+  },
+  endTime: null,
+  pagesViewed: 0,
+  duration: 0,
+  isBounce: true,
+  country: "",
+  device: getBrowserAndDeviceInfo().device,
+  browser: getBrowserAndDeviceInfo().browser,
+  pageVisits: [],
+  lastActivity: Date.now()
+};
+
+function getCountryName() {
+  fetch("https://ipinfo.io/14.139.196.236?token=05d7fac5c0c506")
+    .then((res) => res.json())
+    .then((data) => {
+      countryName = data.country;
+      sessionData.country = countryName;
+    })
+    .catch((err) => console.error("Error:", err));
+  return countryName;
+}
+
+function getOrCreateSessionId() {
+  try {
+    const storedSession = sessionStorage.getItem('cryptique_session');
+    if (storedSession) {
+      const session = JSON.parse(storedSession);
+      const now = Date.now();
+      // If last activity was less than 120 seconds ago, reuse the same session
+      if (now - session.lastActivity < 120000) {
+        // Update last activity time but preserve other data
+        session.lastActivity = now;
+        sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+        
+        // If we have existing pageVisits data, load it
+        if (session.sessionData && session.sessionData.pageVisits) {
+          sessionData.pageVisits = session.sessionData.pageVisits;
+          sessionData.pagesViewed = session.sessionData.pageVisits.length;
+        }
+        
+        return session.id;
+      }
+    }
+    
+    // Create a new session ID if none exists or timeout expired
+    const newSessionId = generateSessionId();
+    
+    // Initialize with empty pageVisits array
+    sessionStorage.setItem('cryptique_session', JSON.stringify({
+      id: newSessionId,
+      lastActivity: Date.now(),
+      pageViews: 0,
+      lastPath: window.location.pathname + window.location.search,
+      sessionData: {
+        pageVisits: []
+      }
+    }));
+    
+    return newSessionId;
+  } catch (error) {
+    console.error("Error in getOrCreateSessionId:", error);
+    return generateSessionId(); // Fallback
+  }
+}
+
+// Update sessionData with the proper session ID
+// This needs to be called after all the necessary functions are defined
+function initializeSessionData() {
+  try {
+    sessionData.sessionId = getOrCreateSessionId();
+  } catch (error) {
+    console.error("Error initializing session data:", error);
+  }
+}
+
+// Call this immediately after definition
+initializeSessionData();
 
 // 🛠️ Activity Tracking Functions
 function trackDailyActivity() {
@@ -192,280 +287,319 @@ function trackPageView() {
     },
   });
 }
-let sessionData = {
-  sessionId: getOrCreateSessionId(),
-  siteId: SITE_ID,
-  userId: userSession.userId,
-  referrer: document.referrer || "direct",
-  utmData: getUTMParameters(),
-  pagePath: window.location.pathname,
-  startTime: new Date().toISOString(),
-  wallet:{
-    walletAddress: "",
-    walletType: "",
-    chainName: "",
-  },
-  endTime: null,
-  pagesViewed: 0,
-  duration: 0,
-  isBounce: true,
-  country: "",
-  device: getBrowserAndDeviceInfo().device,
-  browser: getBrowserAndDeviceInfo().browser,
-  pageVisits: [],
-  lastActivity: Date.now()
-};
-let timer;
-let countryName;
-function getCountryName() {
-  fetch("https://ipinfo.io/14.139.196.236?token=05d7fac5c0c506")
-    .then((res) => res.json())
-    .then((data) => {
-      countryName = data.country;
-      sessionData.country = countryName;
-    })
-    .catch((err) => console.error("Error:", err));
-  return countryName;
-}
-function getOrCreateSessionId() {
-  const storedSession = sessionStorage.getItem('cryptique_session');
-  if (storedSession) {
-    const session = JSON.parse(storedSession);
-    const now = Date.now();
-    // If last activity was less than 120 seconds ago, reuse the same session
-    if (now - session.lastActivity < 120000) {
-      // Update last activity time but preserve other data
-      session.lastActivity = now;
-      sessionStorage.setItem('cryptique_session', JSON.stringify(session));
-      
-      // If we have existing pageVisits data, load it
-      if (session.sessionData && session.sessionData.pageVisits) {
-        sessionData.pageVisits = session.sessionData.pageVisits;
-        sessionData.pagesViewed = session.sessionData.pageVisits.length;
-      }
-      
-      return session.id;
-    }
-  }
-  
-  // Create a new session ID if none exists or timeout expired
-  const newSessionId = generateSessionId();
-  
-  // Initialize with empty pageVisits array
-  sessionStorage.setItem('cryptique_session', JSON.stringify({
-    id: newSessionId,
-    lastActivity: Date.now(),
-    pageViews: 0,
-    lastPath: window.location.pathname + window.location.search,
-    sessionData: {
-      pageVisits: []
-    }
-  }));
-  
-  return newSessionId;
-}
 
 function trackPageVisit() {
-  // Get current path
-  const currentPath = window.location.pathname + window.location.search;
-  const currentUrl = window.location.href;
-  
-  // Get current session info
-  const storedSession = sessionStorage.getItem('cryptique_session');
-  if (!storedSession) {
-    // Initialize session storage if missing
-    sessionStorage.setItem('cryptique_session', JSON.stringify({
-      id: sessionData.sessionId,
-      lastActivity: Date.now(),
-      pageViews: 0,
-      lastPath: currentPath,
-      sessionData: {
+  try {
+    // Get current path
+    const currentPath = window.location.pathname + window.location.search;
+    const currentUrl = window.location.href;
+    
+    // Get current session info
+    const storedSession = sessionStorage.getItem('cryptique_session');
+    if (!storedSession) {
+      // Initialize session storage if missing
+      const initialSessionData = {
+        id: sessionData.sessionId,
+        lastActivity: Date.now(),
+        pageViews: 0,
+        lastPath: currentPath,
+        sessionData: {
+          pageVisits: []
+        }
+      };
+      sessionStorage.setItem('cryptique_session', JSON.stringify(initialSessionData));
+    }
+    
+    let session = JSON.parse(sessionStorage.getItem('cryptique_session'));
+    
+    // Ensure sessionData exists in the session object
+    if (!session.sessionData) {
+      session.sessionData = {
         pageVisits: []
-      }
-    }));
-  }
-  
-  let session = JSON.parse(sessionStorage.getItem('cryptique_session'));
-  
-  // Ensure sessionData exists in the session object
-  if (!session.sessionData) {
-    session.sessionData = {
-      pageVisits: []
-    };
-  }
-  
-  // Get existing page visits from session storage
-  if (!session.sessionData.pageVisits) {
-    session.sessionData.pageVisits = [];
-  }
-  
-  // Check if current page already exists in the session
-  const alreadyVisited = session.sessionData.pageVisits.some(
-    visit => visit.url === currentUrl
-  );
-  
-  // Only add new page visit if it's not a refresh or duplicate
-  if (!alreadyVisited) {
-    // Create page visit entry
-    const pageVisit = {
-      url: currentUrl,
-      title: document.title,
-      path: currentPath,
-      timestamp: new Date().toISOString()
-    };
+      };
+    }
     
-    // Add to sessionData pageVisits
-    session.sessionData.pageVisits.push(pageVisit);
+    // Get existing page visits from session storage
+    if (!session.sessionData.pageVisits) {
+      session.sessionData.pageVisits = [];
+    }
     
-    // Update real page count based on unique URLs
-    session.pageViews = session.sessionData.pageVisits.length;
+    // Check if current page already exists in the session
+    const alreadyVisited = session.sessionData.pageVisits.some(
+      visit => visit.url === currentUrl
+    );
     
-    // Update lastPath
-    session.lastPath = currentPath;
+    // Only add new page visit if it's not a refresh or duplicate
+    if (!alreadyVisited) {
+      // Create page visit entry
+      const pageVisit = {
+        url: currentUrl,
+        title: document.title,
+        path: currentPath,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Add to sessionData pageVisits
+      session.sessionData.pageVisits.push(pageVisit);
+      
+      // Update real page count based on unique URLs
+      session.pageViews = session.sessionData.pageVisits.length;
+      
+      // Update lastPath
+      session.lastPath = currentPath;
+      
+      // Sync with our working sessionData object
+      sessionData.pageVisits = session.sessionData.pageVisits;
+      sessionData.pagesViewed = session.sessionData.pageVisits.length;
+      sessionData.isBounce = sessionData.pagesViewed <= 1;
+    }
     
-    // Sync with our working sessionData object
-    sessionData.pageVisits = session.sessionData.pageVisits;
-    sessionData.pagesViewed = session.sessionData.pageVisits.length;
-    sessionData.isBounce = sessionData.pagesViewed <= 1;
+    // Always update activity time
+    session.lastActivity = Date.now();
+    sessionData.lastActivity = Date.now();
+    
+    // Save updated session
+    sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+  } catch (error) {
+    console.error("Error in trackPageVisit:", error);
   }
-  
-  // Always update activity time
-  session.lastActivity = Date.now();
-  sessionData.lastActivity = Date.now();
-  
-  // Save updated session
-  sessionStorage.setItem('cryptique_session', JSON.stringify(session));
 }
 
 function startSessionTracking() {
-  // Initialize session storage if needed
-  if (!sessionStorage.getItem('cryptique_session')) {
-    const currentPath = window.location.pathname + window.location.search;
-    
-    sessionStorage.setItem('cryptique_session', JSON.stringify({
-      id: sessionData.sessionId,
-      lastActivity: Date.now(),
-      pageViews: 0,
-      lastPath: currentPath,
-      sessionData: {
-        pageVisits: []
-      }
-    }));
-  }
-  
-  // Load session data from storage
-  const session = JSON.parse(sessionStorage.getItem('cryptique_session'));
-  
-  // Sync session data with our working object
-  if (session.sessionData && session.sessionData.pageVisits) {
-    sessionData.pageVisits = session.sessionData.pageVisits;
-    sessionData.pagesViewed = session.sessionData.pageVisits.length;
-    sessionData.isBounce = sessionData.pagesViewed <= 1;
-  }
-  
-  // Set country
-  sessionData.country = countryName;
-  
-  // Track initial page visit
-  trackPageVisit();
-  
-  // Start the tracking interval
-  timer = setInterval(async() => {
-    try {
-      let chainName = "";
-      chainName = await detectChainName();
+  try {
+    // Initialize session storage if needed
+    if (!sessionStorage.getItem('cryptique_session')) {
+      const currentPath = window.location.pathname + window.location.search;
       
-      // Get latest session data
-      const currentSession = JSON.parse(sessionStorage.getItem('cryptique_session'));
-      if (currentSession && currentSession.sessionData) {
-        sessionData.pageVisits = currentSession.sessionData.pageVisits;
-        sessionData.pagesViewed = currentSession.sessionData.pageVisits.length;
-        sessionData.isBounce = sessionData.pagesViewed <= 1;
-      }
-      
-      // Update timestamps and duration
-      const currentTime = new Date();
-      sessionData.endTime = currentTime.toISOString();
-      sessionData.duration = Math.round(
-        (currentTime - new Date(sessionData.startTime)) / 1000
-      );
-      
-      // Update wallet data
-      setupWalletTracking();
-      sessionData.wallet.chainName = chainName;
-      if (userSession.walletAddresses.length > 0) {
-        sessionData.wallet.walletAddress = userSession.walletAddresses[0];
-      }
-      sessionData.wallet.walletType = detectWalletType();
-      
-      // Update activity time
-      sessionData.lastActivity = Date.now();
-      
-      // Update session storage with latest data
-      const updatedSession = {
+      sessionStorage.setItem('cryptique_session', JSON.stringify({
         id: sessionData.sessionId,
         lastActivity: Date.now(),
-        pageViews: sessionData.pagesViewed,
-        lastPath: window.location.pathname + window.location.search,
+        pageViews: 0,
+        lastPath: currentPath,
         sessionData: {
-          pageVisits: sessionData.pageVisits
+          pageVisits: []
         }
-      };
-      
-      sessionStorage.setItem('cryptique_session', JSON.stringify(updatedSession));
-      
-      // Send data to server
-      fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionData }),
-      })
-        .then((res) => res.json())
-        .then(res => console.log('Session sent:', res))
-        .catch((err) => console.error("Error:", err));
-    } catch (error) {
-      console.error("Error in session tracking interval:", error);
+      }));
     }
-  }, 5000); // Send data every 5 seconds
-}
-window.addEventListener("beforeunload", () => {
-  try {
-    // Get latest session data from storage
-    const storedSession = sessionStorage.getItem('cryptique_session');
-    if (storedSession) {
-      const session = JSON.parse(storedSession);
+    
+    // Load session data from storage
+    const sessionStr = sessionStorage.getItem('cryptique_session');
+    if (sessionStr) {
+      const session = JSON.parse(sessionStr);
       
-      // Sync page visits and counts from session storage
+      // Sync session data with our working object
       if (session.sessionData && session.sessionData.pageVisits) {
         sessionData.pageVisits = session.sessionData.pageVisits;
         sessionData.pagesViewed = session.sessionData.pageVisits.length;
+        sessionData.isBounce = sessionData.pagesViewed <= 1;
+      }
+    }
+    
+    // Set country
+    sessionData.country = countryName;
+    
+    // Track initial page visit
+    trackPageVisit();
+    
+    // Start the tracking interval
+    timer = setInterval(async() => {
+      try {
+        let chainName = "";
+        try {
+          chainName = await detectChainName();
+        } catch (chainError) {
+          console.error("Error detecting chain name:", chainError);
+          chainName = "Error";
+        }
+        
+        // Get latest session data
+        const sessionStr = sessionStorage.getItem('cryptique_session');
+        if (sessionStr) {
+          const currentSession = JSON.parse(sessionStr);
+          if (currentSession && currentSession.sessionData) {
+            sessionData.pageVisits = currentSession.sessionData.pageVisits;
+            sessionData.pagesViewed = currentSession.sessionData.pageVisits.length;
+            sessionData.isBounce = sessionData.pagesViewed <= 1;
+          }
+        }
+        
+        // Update timestamps and duration
+        const currentTime = new Date();
+        sessionData.endTime = currentTime.toISOString();
+        sessionData.duration = Math.round(
+          (currentTime - new Date(sessionData.startTime)) / 1000
+        );
+        
+        // Update wallet data
+        try {
+          setupWalletTracking();
+        } catch (walletError) {
+          console.error("Error setting up wallet tracking:", walletError);
+        }
+        
+        sessionData.wallet.chainName = chainName;
+        if (userSession.walletAddresses && userSession.walletAddresses.length > 0) {
+          sessionData.wallet.walletAddress = userSession.walletAddresses[0];
+        }
+        
+        try {
+          sessionData.wallet.walletType = detectWalletType();
+        } catch (walletTypeError) {
+          console.error("Error detecting wallet type:", walletTypeError);
+          sessionData.wallet.walletType = "Unknown";
+        }
+        
+        // Update activity time
+        sessionData.lastActivity = Date.now();
+        
+        // Update session storage with latest data
+        const updatedSession = {
+          id: sessionData.sessionId,
+          lastActivity: Date.now(),
+          pageViews: sessionData.pagesViewed,
+          lastPath: window.location.pathname + window.location.search,
+          sessionData: {
+            pageVisits: sessionData.pageVisits
+          }
+        };
+        
+        sessionStorage.setItem('cryptique_session', JSON.stringify(updatedSession));
+        
+        // Send data to server
+        fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionData }),
+        })
+          .then((res) => res.json())
+          .then(res => console.log('Session sent:', res))
+          .catch((err) => console.error("Error:", err));
+      } catch (error) {
+        console.error("Error in session tracking interval:", error);
+      }
+    }, 5000); // Send data every 5 seconds
+  } catch (error) {
+    console.error("Error in startSessionTracking:", error);
+  }
+}
+
+// Add additional error handling and initialization before main execution
+window.addEventListener("DOMContentLoaded", () => {
+  try {
+    console.log("Cryptique SDK initializing...");
+    
+    // Make sure all required objects exist
+    if (!window.sessionStorage) {
+      console.error("SessionStorage is not available in this browser");
+    }
+    
+    // Ensure our sessionId is properly initialized
+    if (!sessionData || !sessionData.sessionId) {
+      console.log("Reinitializing session data...");
+      if (!sessionData) {
+        sessionData = {
+          sessionId: generateSessionId(),
+          siteId: SITE_ID,
+          userId: getOrCreateUserId(),
+          startTime: new Date().toISOString()
+        };
+      } else if (!sessionData.sessionId) {
+        sessionData.sessionId = generateSessionId();
+      }
+    }
+  } catch (error) {
+    console.error("Error during SDK initialization:", error);
+  }
+});
+
+// Update beforeunload event handler with better error handling
+window.addEventListener("beforeunload", () => {
+  try {
+    console.log("Sending final session data...");
+    
+    // Make sure we have a valid sessionData object
+    if (!sessionData) {
+      console.error("Session data is undefined");
+      return;
+    }
+    
+    // Get latest session data from storage
+    const storedSession = sessionStorage.getItem('cryptique_session');
+    if (storedSession) {
+      try {
+        const session = JSON.parse(storedSession);
+        
+        // Sync page visits and counts from session storage
+        if (session.sessionData && session.sessionData.pageVisits) {
+          sessionData.pageVisits = session.sessionData.pageVisits;
+          sessionData.pagesViewed = session.sessionData.pageVisits.length;
+        }
+      } catch (parseError) {
+        console.error("Error parsing stored session:", parseError);
       }
     }
     
     // Update timestamps and duration
     const currentTime = new Date();
     sessionData.endTime = currentTime.toISOString();
-    sessionData.duration = Math.round(
-      (currentTime - new Date(sessionData.startTime)) / 1000
-    );
-    sessionData.isBounce = sessionData.pagesViewed <= 1;
     
-    // Update wallet info
-    if (window.ethereum && userSession.walletAddresses.length > 0) {
-      sessionData.wallet.walletAddress = userSession.walletAddresses[0];
-      sessionData.wallet.walletType = detectWalletType();
+    // Calculate duration only if startTime exists and is valid
+    if (sessionData.startTime) {
+      try {
+        sessionData.duration = Math.round(
+          (currentTime - new Date(sessionData.startTime)) / 1000
+        );
+      } catch (durationError) {
+        console.error("Error calculating duration:", durationError);
+        sessionData.duration = 0;
+      }
+    } else {
+      sessionData.duration = 0;
     }
     
-    // Send the complete session data
-    console.log("Final session data:", sessionData);
-    navigator.sendBeacon(API_URL, JSON.stringify({ sessionData }));
+    // Set bounce flag
+    sessionData.isBounce = sessionData.pagesViewed <= 1;
     
-    // Clear the timer
-    clearInterval(timer);
+    // Update wallet info if available
+    if (window.ethereum && userSession && userSession.walletAddresses && userSession.walletAddresses.length > 0) {
+      sessionData.wallet = sessionData.wallet || {};
+      sessionData.wallet.walletAddress = userSession.walletAddresses[0];
+      
+      try {
+        sessionData.wallet.walletType = detectWalletType();
+      } catch (walletError) {
+        console.error("Error detecting wallet type:", walletError);
+        sessionData.wallet.walletType = "Unknown";
+      }
+    }
+    
+    // Send the complete session data only if navigator.sendBeacon is available
+    if (navigator.sendBeacon) {
+      try {
+        console.log("Final session data:", sessionData);
+        navigator.sendBeacon(API_URL, JSON.stringify({ sessionData }));
+      } catch (beaconError) {
+        console.error("Error sending beacon:", beaconError);
+      }
+    } else {
+      console.warn("sendBeacon not supported, using fetch instead");
+      fetch(API_URL, {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionData })
+      }).catch(e => console.error("Error sending final data:", e));
+    }
+    
+    // Clear the timer if it exists
+    if (typeof timer !== 'undefined') {
+      clearInterval(timer);
+    }
   } catch (error) {
     console.error("Error in beforeunload handler:", error);
   }
 });
+
 function setupWalletTracking() {
   if (window.ethereum) {
     window.ethereum
