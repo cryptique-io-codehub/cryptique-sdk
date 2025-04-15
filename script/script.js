@@ -204,7 +204,7 @@ let sessionData = {
     walletAddress: "",
     walletType: "",
     chainName: "",
-      },
+  },
   endTime: null,
   pagesViewed: 0,
   duration: 0,
@@ -234,56 +234,79 @@ function getOrCreateSessionId() {
     const now = Date.now();
     // If last activity was less than 120 seconds ago, reuse the same session
     if (now - session.lastActivity < 120000) {
+      // Update last activity time but preserve other data
       session.lastActivity = now;
       sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+      
+      // If we have existing pageVisits data, load it
+      if (session.sessionData && session.sessionData.pageVisits) {
+        sessionData.pageVisits = session.sessionData.pageVisits;
+        sessionData.pagesViewed = session.sessionData.pageVisits.length;
+      }
+      
       return session.id;
     }
   }
   
   // Create a new session ID if none exists or timeout expired
   const newSessionId = generateSessionId();
+  
+  // Initialize with empty pageVisits array
   sessionStorage.setItem('cryptique_session', JSON.stringify({
     id: newSessionId,
     lastActivity: Date.now(),
-    pageViews: 0
+    pageViews: 0,
+    lastPath: window.location.pathname + window.location.search,
+    sessionData: {
+      pageVisits: []
+    }
   }));
+  
   return newSessionId;
 }
 
 function trackPageVisit() {
-  // Get current session info
-  const storedSession = sessionStorage.getItem('cryptique_session');
-  let session = storedSession ? JSON.parse(storedSession) : null;
-  
   // Get current path
   const currentPath = window.location.pathname + window.location.search;
-  
-  if (session) {
-    // Store last visited path to check for duplicate page views
-    const lastPath = session.lastPath || '';
-    
-    // Only increment page views if this is a different page than the last one visited
-    if (lastPath !== currentPath) {
-      // Increment page views counter in session storage
-      session.pageViews = (session.pageViews || 0) + 1;
-      session.lastPath = currentPath;
-    }
-    
-    sessionStorage.setItem('cryptique_session', JSON.stringify(session));
-    
-    // Update the session data object with current page view count
-    sessionData.pagesViewed = session.pageViews;
-    sessionData.isBounce = session.pageViews <= 1;
-  }
-  
-  // Only add a page visit entry if it's a new page
-  const pageVisits = sessionData.pageVisits || [];
   const currentUrl = window.location.href;
   
-  // Check if we already recorded this page
-  const alreadyVisited = pageVisits.some(visit => visit.url === currentUrl);
+  // Get current session info
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  if (!storedSession) {
+    // Initialize session storage if missing
+    sessionStorage.setItem('cryptique_session', JSON.stringify({
+      id: sessionData.sessionId,
+      lastActivity: Date.now(),
+      pageViews: 0,
+      lastPath: currentPath,
+      sessionData: {
+        pageVisits: []
+      }
+    }));
+  }
   
+  let session = JSON.parse(sessionStorage.getItem('cryptique_session'));
+  
+  // Ensure sessionData exists in the session object
+  if (!session.sessionData) {
+    session.sessionData = {
+      pageVisits: []
+    };
+  }
+  
+  // Get existing page visits from session storage
+  if (!session.sessionData.pageVisits) {
+    session.sessionData.pageVisits = [];
+  }
+  
+  // Check if current page already exists in the session
+  const alreadyVisited = session.sessionData.pageVisits.some(
+    visit => visit.url === currentUrl
+  );
+  
+  // Only add new page visit if it's not a refresh or duplicate
   if (!alreadyVisited) {
+    // Create page visit entry
     const pageVisit = {
       url: currentUrl,
       title: document.title,
@@ -291,94 +314,107 @@ function trackPageVisit() {
       timestamp: new Date().toISOString()
     };
     
-    if (!sessionData.pageVisits) {
-      sessionData.pageVisits = [];
-    }
+    // Add to sessionData pageVisits
+    session.sessionData.pageVisits.push(pageVisit);
     
-    sessionData.pageVisits.push(pageVisit);
+    // Update real page count based on unique URLs
+    session.pageViews = session.sessionData.pageVisits.length;
+    
+    // Update lastPath
+    session.lastPath = currentPath;
+    
+    // Sync with our working sessionData object
+    sessionData.pageVisits = session.sessionData.pageVisits;
+    sessionData.pagesViewed = session.sessionData.pageVisits.length;
+    sessionData.isBounce = sessionData.pagesViewed <= 1;
   }
   
-  // Always update last activity time
+  // Always update activity time
+  session.lastActivity = Date.now();
   sessionData.lastActivity = Date.now();
-  sessionStorage.setItem('cryptique_session', JSON.stringify({
-    id: sessionData.sessionId,
-    lastActivity: sessionData.lastActivity,
-    pageViews: sessionData.pagesViewed,
-    lastPath: currentPath
-  }));
+  
+  // Save updated session
+  sessionStorage.setItem('cryptique_session', JSON.stringify(session));
 }
 
 function startSessionTracking() {
-  // Check for existing session data
-  const storedSession = sessionStorage.getItem('cryptique_session');
-  if (storedSession) {
-    const session = JSON.parse(storedSession);
+  // Initialize session storage if needed
+  if (!sessionStorage.getItem('cryptique_session')) {
+    const currentPath = window.location.pathname + window.location.search;
     
-    // If we have page view data from a previous visit, use it
-    if (session.pageViews) {
-      sessionData.pagesViewed = session.pageViews;
-      sessionData.isBounce = session.pageViews <= 1;
-    } else {
-      sessionData.pagesViewed = 1;
-      
-      // Initialize pageViews in session storage
-      session.pageViews = 1;
-      session.lastPath = window.location.pathname + window.location.search;
-      sessionStorage.setItem('cryptique_session', JSON.stringify(session));
-    }
-  } else {
-    // First page view of a new session
-    sessionData.pagesViewed = 1;
-    
-    // Initialize session storage with first page view
     sessionStorage.setItem('cryptique_session', JSON.stringify({
       id: sessionData.sessionId,
       lastActivity: Date.now(),
-      pageViews: 1,
-      lastPath: window.location.pathname + window.location.search
+      pageViews: 0,
+      lastPath: currentPath,
+      sessionData: {
+        pageVisits: []
+      }
     }));
   }
   
+  // Load session data from storage
+  const session = JSON.parse(sessionStorage.getItem('cryptique_session'));
+  
+  // Sync session data with our working object
+  if (session.sessionData && session.sessionData.pageVisits) {
+    sessionData.pageVisits = session.sessionData.pageVisits;
+    sessionData.pagesViewed = session.sessionData.pageVisits.length;
+    sessionData.isBounce = sessionData.pagesViewed <= 1;
+  }
+  
+  // Set country
   sessionData.country = countryName;
-  // Track this page visit
+  
+  // Track initial page visit
   trackPageVisit();
   
+  // Start the tracking interval
   timer = setInterval(async() => {
     try {
       let chainName = "";
       chainName = await detectChainName();
+      
+      // Get latest session data
+      const currentSession = JSON.parse(sessionStorage.getItem('cryptique_session'));
+      if (currentSession && currentSession.sessionData) {
+        sessionData.pageVisits = currentSession.sessionData.pageVisits;
+        sessionData.pagesViewed = currentSession.sessionData.pageVisits.length;
+        sessionData.isBounce = sessionData.pagesViewed <= 1;
+      }
+      
+      // Update timestamps and duration
       const currentTime = new Date();
       sessionData.endTime = currentTime.toISOString();
       sessionData.duration = Math.round(
         (currentTime - new Date(sessionData.startTime)) / 1000
       );
+      
+      // Update wallet data
       setupWalletTracking();
       sessionData.wallet.chainName = chainName;
       if (userSession.walletAddresses.length > 0) {
         sessionData.wallet.walletAddress = userSession.walletAddresses[0];
       }
       sessionData.wallet.walletType = detectWalletType();
-      // Update last activity time
+      
+      // Update activity time
       sessionData.lastActivity = Date.now();
       
-      // Get latest session data from storage
-      const storedSession = sessionStorage.getItem('cryptique_session');
-      if (storedSession) {
-        const session = JSON.parse(storedSession);
-        // Make sure we're using the most up-to-date page view count
-        if (session.pageViews) {
-          sessionData.pagesViewed = session.pageViews;
-          sessionData.isBounce = session.pageViews <= 1;
-        }
-      }
-      
-      sessionStorage.setItem('cryptique_session', JSON.stringify({
+      // Update session storage with latest data
+      const updatedSession = {
         id: sessionData.sessionId,
-        lastActivity: sessionData.lastActivity,
+        lastActivity: Date.now(),
         pageViews: sessionData.pagesViewed,
-        lastPath: window.location.pathname + window.location.search
-      }));
+        lastPath: window.location.pathname + window.location.search,
+        sessionData: {
+          pageVisits: sessionData.pageVisits
+        }
+      };
       
+      sessionStorage.setItem('cryptique_session', JSON.stringify(updatedSession));
+      
+      // Send data to server
       fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -394,15 +430,19 @@ function startSessionTracking() {
 }
 window.addEventListener("beforeunload", () => {
   try {
-    // Get latest page view count from session storage
+    // Get latest session data from storage
     const storedSession = sessionStorage.getItem('cryptique_session');
     if (storedSession) {
       const session = JSON.parse(storedSession);
-      if (session.pageViews) {
-        sessionData.pagesViewed = session.pageViews;
+      
+      // Sync page visits and counts from session storage
+      if (session.sessionData && session.sessionData.pageVisits) {
+        sessionData.pageVisits = session.sessionData.pageVisits;
+        sessionData.pagesViewed = session.sessionData.pageVisits.length;
       }
     }
     
+    // Update timestamps and duration
     const currentTime = new Date();
     sessionData.endTime = currentTime.toISOString();
     sessionData.duration = Math.round(
@@ -410,15 +450,18 @@ window.addEventListener("beforeunload", () => {
     );
     sessionData.isBounce = sessionData.pagesViewed <= 1;
     
-    // Ensure we have the latest wallet data
+    // Update wallet info
     if (window.ethereum && userSession.walletAddresses.length > 0) {
       sessionData.wallet.walletAddress = userSession.walletAddresses[0];
       sessionData.wallet.walletType = detectWalletType();
     }
     
-    // Send the final session data
+    // Send the complete session data
+    console.log("Final session data:", sessionData);
     navigator.sendBeacon(API_URL, JSON.stringify({ sessionData }));
-    clearInterval(timer); // Stop the timer
+    
+    // Clear the timer
+    clearInterval(timer);
   } catch (error) {
     console.error("Error in beforeunload handler:", error);
   }
