@@ -431,10 +431,6 @@ function startSessionTracking() {
       sessionData.referrer = getProperReferrer();
       sessionData.isFirstPage = true;
       
-      // Increment the session count in localStorage
-      const sessionCount = parseInt(localStorage.getItem('cryptique_session_count') || '0', 10);
-      localStorage.setItem('cryptique_session_count', (sessionCount + 1).toString());
-      
       sessionStorage.setItem('cryptique_session', JSON.stringify({
         id: sessionData.sessionId,
         lastActivity: Date.now(),
@@ -890,15 +886,6 @@ function trackEvent(eventType, eventData = {}) {
     sessionStorage.setItem('cryptique_session', JSON.stringify(session));
   }
   
-  // Calculate session count from localStorage
-  let sessionCount = parseInt(localStorage.getItem('cryptique_session_count') || '1', 10);
-  
-  // Calculate current session duration in seconds
-  const currentSessionDuration = Math.round((Date.now() - userSession.sessionStart) / 1000);
-  
-  // Determine if this is a bounce (only one page viewed)
-  const isBounce = sessionData.pagesViewed <= 1;
-  
   const payload = {
     siteId: SITE_ID,
     websiteUrl: window.location.href,
@@ -912,18 +899,16 @@ function trackEvent(eventType, eventData = {}) {
       ...eventData,
       ...userSession.utmData,
       referrer: userSession.referrer,
-      sessionDuration: currentSessionDuration,
-      pagesViewed: sessionData.pagesViewed || userSession.pagesPerVisit,
-      pagesPerVisit: sessionData.pagesViewed / sessionCount,
-      isBounce: isBounce,
+      sessionDuration: Date.now() - userSession.sessionStart,
+      pagesPerVisit: sessionData.pagesViewed || userSession.pagesPerVisit,
+      isBounce: sessionData.pagesViewed <= 1,
       browser: userSession.browser,
       os: userSession.os,
       deviceType: userSession.deviceType,
       resolution: userSession.resolution,
       language: userSession.language,
       country: userSession.country,
-      pageVisits: sessionData.pageVisits,
-      sessionCount: sessionCount
+      pageVisits: sessionData.pageVisits
     },
     timestamp: new Date().toISOString(),
     version: VERSION,
