@@ -179,7 +179,7 @@ function trackPageView() {
   });
 }
 let sessionData = {
-  sessionId: generateSessionId(),
+  sessionId: getOrCreateSessionId(),
   siteId: SITE_ID,
   userId: userSession.userId,
   referrer: document.referrer || "direct",
@@ -198,6 +198,8 @@ let sessionData = {
   country: "",
   device: getBrowserAndDeviceInfo().device,
   browser: getBrowserAndDeviceInfo().browser,
+  pageVisits: [],
+  lastActivity: Date.now()
 };
 let timer;
 let countryName;
@@ -211,9 +213,48 @@ function getCountryName() {
     .catch((err) => console.error("Error:", err));
   return countryName;
 }
+function getOrCreateSessionId() {
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  if (storedSession) {
+    const session = JSON.parse(storedSession);
+    const now = Date.now();
+    // If last activity was less than 60 seconds ago, reuse the same session
+    if (now - session.lastActivity < 60000) {
+      session.lastActivity = now;
+      sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+      return session.id;
+    }
+  }
+  
+  // Create a new session ID if none exists or timeout expired
+  const newSessionId = generateSessionId();
+  sessionStorage.setItem('cryptique_session', JSON.stringify({
+    id: newSessionId,
+    lastActivity: Date.now()
+  }));
+  return newSessionId;
+}
+
+function trackPageVisit() {
+  const pageVisit = {
+    url: window.location.href,
+    title: document.title,
+    timestamp: new Date().toISOString()
+  };
+  sessionData.pageVisits.push(pageVisit);
+  sessionData.lastActivity = Date.now();
+  sessionStorage.setItem('cryptique_session', JSON.stringify({
+    id: sessionData.sessionId,
+    lastActivity: sessionData.lastActivity
+  }));
+}
+
 function startSessionTracking() {
   sessionData.pagesViewed++;
   sessionData.country = countryName;
+  // Track this page visit
+  trackPageVisit();
+  
   timer = setInterval(async() => {
       let chainName = "";
       chainName = await detectChainName();
@@ -228,7 +269,13 @@ function startSessionTracking() {
     sessionData.wallet.walletAddress = userSession.walletAddresses[0];
     }
     sessionData.wallet.walletType = detectWalletType();
-    // console.log("Session Data:", sessionData);
+    // Update last activity time
+    sessionData.lastActivity = Date.now();
+    sessionStorage.setItem('cryptique_session', JSON.stringify({
+      id: sessionData.sessionId,
+      lastActivity: sessionData.lastActivity
+    }));
+    
     fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -401,11 +448,18 @@ async function detectChainName() {
 
 function trackEvent(eventType, eventData = {}) {
   userSession.country = getCountryName();
+  // Update last activity time
+  sessionData.lastActivity = Date.now();
+  sessionStorage.setItem('cryptique_session', JSON.stringify({
+    id: sessionData.sessionId,
+    lastActivity: sessionData.lastActivity
+  }));
+  
   const payload = {
     siteId: SITE_ID,
     websiteUrl: window.location.href,
     userId: userSession.userId,
-    sessionId: userSession.sessionId,
+    sessionId: sessionData.sessionId,
     type: eventType,
     pagePath: window.location.pathname,
     isWeb3User: detectWallets(),
@@ -423,6 +477,7 @@ function trackEvent(eventType, eventData = {}) {
       resolution: userSession.resolution,
       language: userSession.language,
       country: userSession.country,
+      pageVisits: sessionData.pageVisits
     },
     timestamp: new Date().toISOString(),
     version: VERSION,
@@ -449,3 +504,5 @@ function initCryptiqueAnalytics() {
 loadWeb3Script(() => {
   initCryptiqueAnalytics();
 });
+
+// Updated for Vercel deployment - timestamp: 2023-07-19
