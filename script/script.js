@@ -1,5 +1,5 @@
 const API_URL = "https://cryptique-backend.vercel.app/api/sdk/track";
-const VERSION = "v0.11.21";
+const VERSION = "v0.11.22";
 const CONSENT_STORAGE_KEY = "mtm_consent";
 const USER_ID_KEY = "mtm_user_id";
 const analyticsScript =
