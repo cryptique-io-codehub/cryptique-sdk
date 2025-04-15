@@ -890,11 +890,14 @@ function trackEvent(eventType, eventData = {}) {
     sessionStorage.setItem('cryptique_session', JSON.stringify(session));
   }
   
-  // Calculate session count from localStorage (we'll store this in localStorage to persist across page refreshes)
+  // Calculate session count from localStorage
   let sessionCount = parseInt(localStorage.getItem('cryptique_session_count') || '1', 10);
   
-  // Calculate current session duration
-  const currentSessionDuration = Date.now() - userSession.sessionStart;
+  // Calculate current session duration in seconds
+  const currentSessionDuration = Math.round((Date.now() - userSession.sessionStart) / 1000);
+  
+  // Determine if this is a bounce (only one page viewed)
+  const isBounce = sessionData.pagesViewed <= 1;
   
   const payload = {
     siteId: SITE_ID,
@@ -910,9 +913,9 @@ function trackEvent(eventType, eventData = {}) {
       ...userSession.utmData,
       referrer: userSession.referrer,
       sessionDuration: currentSessionDuration,
-      pagesPerVisit: (sessionData.pagesViewed || userSession.pagesPerVisit) / sessionCount,
-      avgSessionDuration: sessionData.duration || Math.round(currentSessionDuration / 1000),
-      isBounce: sessionData.pagesViewed <= 1,
+      pagesViewed: sessionData.pagesViewed || userSession.pagesPerVisit,
+      pagesPerVisit: sessionData.pagesViewed / sessionCount,
+      isBounce: isBounce,
       browser: userSession.browser,
       os: userSession.os,
       deviceType: userSession.deviceType,
