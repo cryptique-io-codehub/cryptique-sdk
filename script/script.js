@@ -165,8 +165,22 @@ function getWeekNumber(d) {
 
 // 📈 Page View and Event Tracking
 function trackPageView() {
-  userSession.pagesPerVisit++;
-  if (userSession.pagesPerVisit > 1) userSession.isBounce = false;
+  // Get current session data from storage
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  let pageViews = 1;
+  
+  if (storedSession) {
+    const session = JSON.parse(storedSession);
+    // Update page views
+    pageViews = (session.pageViews || 0) + 1;
+    session.pageViews = pageViews;
+    session.lastActivity = Date.now();
+    sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+  }
+  
+  // Update userSession page count
+  userSession.pagesPerVisit = pageViews;
+  userSession.isBounce = pageViews <= 1;
 
   trackEvent("PAGEVIEW", {
     pageUrl: window.location.href,
@@ -230,12 +244,27 @@ function getOrCreateSessionId() {
   const newSessionId = generateSessionId();
   sessionStorage.setItem('cryptique_session', JSON.stringify({
     id: newSessionId,
-    lastActivity: Date.now()
+    lastActivity: Date.now(),
+    pageViews: 0
   }));
   return newSessionId;
 }
 
 function trackPageVisit() {
+  // Get current session info
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  let session = storedSession ? JSON.parse(storedSession) : null;
+  
+  if (session) {
+    // Increment page views counter in session storage
+    session.pageViews = (session.pageViews || 0) + 1;
+    sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+    
+    // Update the session data object
+    sessionData.pagesViewed = session.pageViews;
+    sessionData.isBounce = session.pageViews <= 1;
+  }
+  
   const pageVisit = {
     url: window.location.href,
     title: document.title,
@@ -245,12 +274,29 @@ function trackPageVisit() {
   sessionData.lastActivity = Date.now();
   sessionStorage.setItem('cryptique_session', JSON.stringify({
     id: sessionData.sessionId,
-    lastActivity: sessionData.lastActivity
+    lastActivity: sessionData.lastActivity,
+    pageViews: sessionData.pagesViewed
   }));
 }
 
 function startSessionTracking() {
-  sessionData.pagesViewed++;
+  // Check for existing session data
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  if (storedSession) {
+    const session = JSON.parse(storedSession);
+    
+    // If we have page view data from a previous visit, use it
+    if (session.pageViews) {
+      sessionData.pagesViewed = session.pageViews;
+      sessionData.isBounce = session.pageViews <= 1;
+    } else {
+      sessionData.pagesViewed = 1;
+    }
+  } else {
+    // First page view of a new session
+    sessionData.pagesViewed = 1;
+  }
+  
   sessionData.country = countryName;
   // Track this page visit
   trackPageVisit();
@@ -273,7 +319,8 @@ function startSessionTracking() {
     sessionData.lastActivity = Date.now();
     sessionStorage.setItem('cryptique_session', JSON.stringify({
       id: sessionData.sessionId,
-      lastActivity: sessionData.lastActivity
+      lastActivity: sessionData.lastActivity,
+      pageViews: sessionData.pagesViewed
     }));
     
     fetch(API_URL, {
@@ -287,12 +334,20 @@ function startSessionTracking() {
   }, 5000); // Send data every 5 seconds
 }
 window.addEventListener("beforeunload", () => {
-  sessionData.pagesViewed++;
+  // Get latest page view count from session storage
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  if (storedSession) {
+    const session = JSON.parse(storedSession);
+    if (session.pageViews) {
+      sessionData.pagesViewed = session.pageViews;
+    }
+  }
+  
   sessionData.endTime = new Date().toISOString();
   sessionData.duration = Math.round(
     (new Date() - new Date(sessionData.startTime)) / 1000
   );
-  sessionData.isBounce = sessionData.pagesViewed === 1;
+  sessionData.isBounce = sessionData.pagesViewed <= 1;
   navigator.sendBeacon(API_URL, JSON.stringify(sessionData));
   clearInterval(timer); // Stop the timer
 });
@@ -448,12 +503,23 @@ async function detectChainName() {
 
 function trackEvent(eventType, eventData = {}) {
   userSession.country = getCountryName();
-  // Update last activity time
-  sessionData.lastActivity = Date.now();
-  sessionStorage.setItem('cryptique_session', JSON.stringify({
-    id: sessionData.sessionId,
-    lastActivity: sessionData.lastActivity
-  }));
+  
+  // Get latest session info from storage
+  const storedSession = sessionStorage.getItem('cryptique_session');
+  if (storedSession) {
+    const session = JSON.parse(storedSession);
+    
+    // Update last activity time
+    session.lastActivity = Date.now();
+    
+    // If we have page view data, use it
+    if (typeof session.pageViews !== 'undefined') {
+      sessionData.pagesViewed = session.pageViews;
+      sessionData.isBounce = session.pageViews <= 1;
+    }
+    
+    sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+  }
   
   const payload = {
     siteId: SITE_ID,
@@ -469,8 +535,8 @@ function trackEvent(eventType, eventData = {}) {
       ...userSession.utmData,
       referrer: userSession.referrer,
       sessionDuration: Date.now() - userSession.sessionStart,
-      pagesPerVisit: userSession.pagesPerVisit,
-      isBounce: userSession.isBounce,
+      pagesPerVisit: sessionData.pagesViewed || userSession.pagesPerVisit,
+      isBounce: sessionData.pagesViewed <= 1,
       browser: userSession.browser,
       os: userSession.os,
       deviceType: userSession.deviceType,
@@ -485,7 +551,7 @@ function trackEvent(eventType, eventData = {}) {
   fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ payload ,sessionData}),
+    body: JSON.stringify({ payload, sessionData }),
   })
     .then((res) => res.json())
     .then((result) => console.log("API Response:", result))
