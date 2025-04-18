@@ -967,11 +967,12 @@ async function updateWalletInfo() {
       chainName: chainName || "No Wallet Detected"
     };
 
-    // Update isWeb3User based on wallet data
-    sessionData.isWeb3User = 
-      walletAddress && walletAddress !== "" && walletAddress !== "No Wallet Detected" &&
-      walletType && walletType !== "" && walletType !== "No Wallet Detected" &&
-      chainName && chainName !== "" && chainName !== "No Wallet Detected";
+    // Update isWeb3User based on wallet data - if ANY property is non-default
+    sessionData.isWeb3User = (
+      (walletAddress && walletAddress !== "" && walletAddress !== "No Wallet Detected") ||
+      (walletType && walletType !== "" && walletType !== "No Wallet Detected") ||
+      (chainName && chainName !== "" && chainName !== "No Wallet Detected")
+    );
 
   } catch (error) {
     console.error("Error updating wallet info:", error);
