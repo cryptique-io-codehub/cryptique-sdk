@@ -461,7 +461,12 @@ function startSessionTracking() {
         if (session.sessionData.pageVisits) {
           sessionData.pageVisits = session.sessionData.pageVisits;
           sessionData.pagesViewed = session.sessionData.pageVisits.length;
-          sessionData.isBounce = sessionData.pagesViewed <= 1;
+          // Calculate current duration
+          const currentTime = new Date();
+          const startTime = new Date(sessionData.startTime);
+          const currentDuration = Math.round((currentTime - startTime) / 1000);
+          // Update bounce status based on EITHER duration >= 30 seconds OR more than 1 page view
+          sessionData.isBounce = currentDuration < 30 && sessionData.pagesViewed <= 1;
           sessionData.isFirstPage = sessionData.pageVisits.length === 0;
         }
       }
@@ -508,7 +513,12 @@ function startSessionTracking() {
             if (currentSession.sessionData.pageVisits) {
               sessionData.pageVisits = currentSession.sessionData.pageVisits;
               sessionData.pagesViewed = currentSession.sessionData.pageVisits.length;
-              sessionData.isBounce = sessionData.pagesViewed <= 1;
+              // Calculate current duration
+              const currentTime = new Date();
+              const startTime = new Date(sessionData.startTime);
+              const currentDuration = Math.round((currentTime - startTime) / 1000);
+              // Update bounce status based on EITHER duration >= 30 seconds OR more than 1 page view
+              sessionData.isBounce = currentDuration < 30 && sessionData.pagesViewed <= 1;
             }
           }
         }
@@ -519,6 +529,9 @@ function startSessionTracking() {
         sessionData.duration = Math.round(
           (currentTime - new Date(sessionData.startTime)) / 1000
         );
+        
+        // Update bounce status based on current duration
+        sessionData.isBounce = sessionData.duration < 30 && sessionData.pagesViewed <= 1;
         
         // Update wallet data
         try {
@@ -871,7 +884,12 @@ function trackEvent(eventType, eventData = {}) {
     // If we have page view data, use it
     if (typeof session.pageViews !== 'undefined') {
       sessionData.pagesViewed = session.pageViews;
-      sessionData.isBounce = session.pageViews <= 1;
+      // Calculate current duration
+      const currentTime = new Date();
+      const startTime = new Date(sessionData.startTime);
+      const currentDuration = Math.round((currentTime - startTime) / 1000);
+      // Update bounce status based on EITHER duration >= 30 seconds OR more than 1 page view
+      sessionData.isBounce = currentDuration < 30 && sessionData.pagesViewed <= 1;
     }
     
     sessionStorage.setItem('cryptique_session', JSON.stringify(session));
@@ -892,7 +910,7 @@ function trackEvent(eventType, eventData = {}) {
       referrer: userSession.referrer,
       sessionDuration: Date.now() - userSession.sessionStart,
       pagesPerVisit: sessionData.pagesViewed || userSession.pagesPerVisit,
-      isBounce: sessionData.pagesViewed <= 1,
+      isBounce: sessionData.isBounce,
       browser: userSession.browser,
       os: userSession.os,
       deviceType: userSession.deviceType,
