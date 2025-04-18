@@ -101,10 +101,11 @@ let userSession = {
   referrer: getStoredReferrer(),
   resolution: `${window.screen.width}x${window.screen.height}`,
   consentGiven: getTrackingConsent(),
+  walletConnected: false,  // Add explicit wallet connection status
   walletAddresses: [],
   chainId: null,
   provider: null,
-  utmData: getUTMParameters(),  // This will now include utm_id
+  utmData: getUTMParameters(),
   browser: getBrowserAndDeviceInfo().browser,
   os: getBrowserAndDeviceInfo().device.os,
   device: getBrowserAndDeviceInfo().device,
@@ -117,7 +118,7 @@ let sessionData = {
   siteId: SITE_ID,
   userId: userSession.userId,
   referrer: "direct",
-  utmData: getUTMParameters(),  // This will now include utm_id
+  utmData: getUTMParameters(),
   pagePath: window.location.pathname,
   startTime: new Date().toISOString(),
   wallet: {
@@ -125,7 +126,8 @@ let sessionData = {
     walletType: "",
     chainName: "",
   },
-  isWeb3User: false,  // Add isWeb3User field with default false
+  isWeb3User: false,
+  walletConnected: false,  // Add explicit wallet connection status
   endTime: null,
   pagesViewed: 0,
   duration: 0,
@@ -908,6 +910,7 @@ function trackEvent(eventType, eventData = {}) {
     type: eventType,
     pagePath: window.location.pathname,
     isWeb3User: sessionData.isWeb3User,
+    walletConnected: sessionData.walletConnected,  // Add wallet connection status
 
     eventData: {
       ...eventData,
@@ -922,7 +925,8 @@ function trackEvent(eventType, eventData = {}) {
       resolution: userSession.resolution,
       language: userSession.language,
       country: userSession.country,
-      pageVisits: sessionData.pageVisits
+      pageVisits: sessionData.pageVisits,
+      walletConnected: sessionData.walletConnected  // Add to event data as well
     },
     timestamp: new Date().toISOString(),
     version: VERSION,
@@ -966,7 +970,6 @@ async function updateWalletInfo() {
         }
       } catch (accountError) {
         console.log("Error getting accounts:", accountError);
-        // Don't set walletAddress if there's an error
       }
     }
 
@@ -977,33 +980,35 @@ async function updateWalletInfo() {
       chainName: chainName || "No Wallet Detected"
     };
 
-    // Log wallet data for debugging
-    console.log("Wallet Info:", {
-      walletAddress: sessionData.wallet.walletAddress,
-      walletType: sessionData.wallet.walletType,
-      chainName: sessionData.wallet.chainName
-    });
+    // Update wallet connection status - only true if we have a valid wallet address
+    const isWalletConnected = walletAddress && 
+                            walletAddress !== "" && 
+                            walletAddress !== "No Wallet Detected";
+    
+    sessionData.walletConnected = isWalletConnected;
+    userSession.walletConnected = isWalletConnected;
 
     // Update isWeb3User if ANY wallet property is non-default
-    const hasWalletAddress = sessionData.wallet.walletAddress && 
-                           sessionData.wallet.walletAddress !== "" && 
-                           sessionData.wallet.walletAddress !== "No Wallet Detected";
+    const hasWalletAddress = walletAddress && 
+                           walletAddress !== "" && 
+                           walletAddress !== "No Wallet Detected";
     
-    const hasWalletType = sessionData.wallet.walletType && 
-                         sessionData.wallet.walletType !== "" && 
-                         sessionData.wallet.walletType !== "No Wallet Detected";
+    const hasWalletType = walletType && 
+                         walletType !== "" && 
+                         walletType !== "No Wallet Detected";
     
-    const hasChainName = sessionData.wallet.chainName && 
-                        sessionData.wallet.chainName !== "" && 
-                        sessionData.wallet.chainName !== "No Wallet Detected";
+    const hasChainName = chainName && 
+                        chainName !== "" && 
+                        chainName !== "No Wallet Detected";
 
     sessionData.isWeb3User = hasWalletAddress || hasWalletType || hasChainName;
 
     // Log the result for debugging
-    console.log("isWeb3User evaluation:", {
-      hasWalletAddress,
-      hasWalletType,
-      hasChainName,
+    console.log("Wallet Status:", {
+      walletAddress,
+      walletType,
+      chainName,
+      isWalletConnected: sessionData.walletConnected,
       isWeb3User: sessionData.isWeb3User
     });
 
@@ -1015,5 +1020,7 @@ async function updateWalletInfo() {
       chainName: "No Wallet Detected"
     };
     sessionData.isWeb3User = false;
+    sessionData.walletConnected = false;
+    userSession.walletConnected = false;
   }
 }
