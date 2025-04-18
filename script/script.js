@@ -383,7 +383,14 @@ function trackPageVisit() {
       // Sync with our working sessionData object
       sessionData.pageVisits = session.sessionData.pageVisits;
       sessionData.pagesViewed = session.sessionData.pageVisits.length;
-      sessionData.isBounce = session.sessionData.pageVisits.length <= 1;
+      
+      // Calculate current duration
+      const currentTime = new Date();
+      const startTime = new Date(sessionData.startTime);
+      const currentDuration = Math.round((currentTime - startTime) / 1000);
+      
+      // Update bounce status based on EITHER duration >= 30 seconds OR more than 1 page view
+      sessionData.isBounce = currentDuration < 30 && sessionData.pagesViewed <= 1;
     }
     
     // Always update activity time
@@ -657,8 +664,8 @@ window.addEventListener("beforeunload", () => {
       sessionData.duration = 0;
     }
     
-    // Set bounce flag based on page count
-    sessionData.isBounce = sessionData.pagesViewed <= 1;
+    // Set bounce flag based on EITHER duration >= 30 seconds OR more than 1 page view
+    sessionData.isBounce = sessionData.duration < 30 && sessionData.pagesViewed <= 1;
     
     // Update wallet info if available
     if (window.ethereum && userSession && userSession.walletAddresses && userSession.walletAddresses.length > 0) {
