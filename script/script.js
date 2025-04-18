@@ -779,9 +779,8 @@ function detectWalletType() {
     } else {
       return "Unknown Wallet";
     }
-  } else {
-    return "No Wallet Detected";
   }
+  return "No Wallet Detected";
 }
 function detectChainId() {
   if (window.ethereum) {
@@ -895,6 +894,12 @@ function trackEvent(eventType, eventData = {}) {
     sessionStorage.setItem('cryptique_session', JSON.stringify(session));
   }
   
+  // Update wallet info before sending event
+  const walletType = detectWalletType();
+  if (walletType !== "No Wallet Detected") {
+    sessionData.isWeb3User = true;
+  }
+  
   const payload = {
     siteId: SITE_ID,
     websiteUrl: window.location.href,
@@ -902,7 +907,7 @@ function trackEvent(eventType, eventData = {}) {
     sessionId: sessionData.sessionId,
     type: eventType,
     pagePath: window.location.pathname,
-    isWeb3User: detectWallets(),
+    isWeb3User: sessionData.isWeb3User,
 
     eventData: {
       ...eventData,
@@ -954,9 +959,14 @@ async function updateWalletInfo() {
     let walletAddress = "";
 
     if (window.ethereum) {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      if (accounts && accounts.length > 0) {
-        walletAddress = accounts[0];
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        if (accounts && accounts.length > 0) {
+          walletAddress = accounts[0];
+        }
+      } catch (accountError) {
+        console.log("Error getting accounts:", accountError);
+        // Don't set walletAddress if there's an error
       }
     }
 
@@ -967,12 +977,35 @@ async function updateWalletInfo() {
       chainName: chainName || "No Wallet Detected"
     };
 
-    // Update isWeb3User based on wallet data - if ANY property is non-default
-    sessionData.isWeb3User = (
-      (walletAddress && walletAddress !== "" && walletAddress !== "No Wallet Detected") ||
-      (walletType && walletType !== "" && walletType !== "No Wallet Detected") ||
-      (chainName && chainName !== "" && chainName !== "No Wallet Detected")
-    );
+    // Log wallet data for debugging
+    console.log("Wallet Info:", {
+      walletAddress: sessionData.wallet.walletAddress,
+      walletType: sessionData.wallet.walletType,
+      chainName: sessionData.wallet.chainName
+    });
+
+    // Update isWeb3User if ANY wallet property is non-default
+    const hasWalletAddress = sessionData.wallet.walletAddress && 
+                           sessionData.wallet.walletAddress !== "" && 
+                           sessionData.wallet.walletAddress !== "No Wallet Detected";
+    
+    const hasWalletType = sessionData.wallet.walletType && 
+                         sessionData.wallet.walletType !== "" && 
+                         sessionData.wallet.walletType !== "No Wallet Detected";
+    
+    const hasChainName = sessionData.wallet.chainName && 
+                        sessionData.wallet.chainName !== "" && 
+                        sessionData.wallet.chainName !== "No Wallet Detected";
+
+    sessionData.isWeb3User = hasWalletAddress || hasWalletType || hasChainName;
+
+    // Log the result for debugging
+    console.log("isWeb3User evaluation:", {
+      hasWalletAddress,
+      hasWalletType,
+      hasChainName,
+      isWeb3User: sessionData.isWeb3User
+    });
 
   } catch (error) {
     console.error("Error updating wallet info:", error);
