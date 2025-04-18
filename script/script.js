@@ -36,31 +36,15 @@ function setTrackingConsent(consent) {
 }
 
 function getUTMParameters() {
-    const utmParams = [
-      "utm_source",
-      "utm_medium",
-      "utm_campaign",
-      "utm_term",
-      "utm_content",
-    ];
-  
-    const urlParams = new URLSearchParams(window.location.search);
-    let storedUTM = {};
-  
-    utmParams.forEach(param => {
-      const value = urlParams.get(param);
-      if (value) {
-        storedUTM[param] = value;
-      }
-    });
-  
-    return {
-      source: storedUTM["utm_source"] || null,
-      medium: storedUTM["utm_medium"] || null,
-      campaign: storedUTM["utm_campaign"] || null,
-      term: storedUTM["utm_term"] || null,
-      content: storedUTM["utm_content"] || null,
-    };
+  const urlParams = new URLSearchParams(window.location.search);
+  return {
+    source: urlParams.get('utm_source') || '',
+    medium: urlParams.get('utm_medium') || '',
+    campaign: urlParams.get('utm_campaign') || '',
+    term: urlParams.get('utm_term') || '',
+    content: urlParams.get('utm_content') || '',
+    utm_id: urlParams.get('utm_id') || ''  // Added utm_id parameter
+  };
 }
 
 function getStoredReferrer() {
@@ -120,23 +104,23 @@ let userSession = {
   walletAddresses: [],
   chainId: null,
   provider: null,
-  utmData: getUTMParameters(),
+  utmData: getUTMParameters(),  // This will now include utm_id
   browser: getBrowserAndDeviceInfo().browser,
   os: getBrowserAndDeviceInfo().device.os,
   device: getBrowserAndDeviceInfo().device,
   country: null,
 };
 
-// Pre-initialize sessionData with a temporary ID (will be updated later)
+// Pre-initialize sessionData with a temporary ID
 let sessionData = {
-  sessionId: generateSessionId(), // Temporary ID
+  sessionId: generateSessionId(),
   siteId: SITE_ID,
   userId: userSession.userId,
-  referrer: "direct", // Default to "direct" when no referrer
-  utmData: getUTMParameters(),
+  referrer: "direct",
+  utmData: getUTMParameters(),  // This will now include utm_id
   pagePath: window.location.pathname,
   startTime: new Date().toISOString(),
-  wallet:{
+  wallet: {
     walletAddress: "",
     walletType: "",
     chainName: "",
@@ -150,7 +134,7 @@ let sessionData = {
   browser: getBrowserAndDeviceInfo().browser,
   pageVisits: [],
   lastActivity: Date.now(),
-  isFirstPage: true // Track if this is the first page in the session
+  isFirstPage: true
 };
 
 function getCountryName() {
