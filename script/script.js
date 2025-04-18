@@ -125,6 +125,7 @@ let sessionData = {
     walletType: "",
     chainName: "",
   },
+  isWeb3User: false,  // Add isWeb3User field with default false
   endTime: null,
   pagesViewed: 0,
   duration: 0,
@@ -467,7 +468,6 @@ function startSessionTracking() {
           const currentDuration = Math.round((currentTime - startTime) / 1000);
           // Update bounce status based on EITHER duration >= 30 seconds OR more than 1 page view
           sessionData.isBounce = currentDuration < 30 && sessionData.pagesViewed <= 1;
-          sessionData.isFirstPage = sessionData.pageVisits.length === 0;
         }
       }
     }
@@ -535,7 +535,7 @@ function startSessionTracking() {
         
         // Update wallet data
         try {
-          setupWalletTracking();
+          await updateWalletInfo();
         } catch (walletError) {
           console.error("Error setting up wallet tracking:", walletError);
         }
@@ -946,3 +946,40 @@ loadWeb3Script(() => {
 });
 
 // Updated for Vercel deployment - timestamp: 2023-07-19
+
+async function updateWalletInfo() {
+  try {
+    const walletType = detectWalletType();
+    const chainName = await detectChainName();
+    let walletAddress = "";
+
+    if (window.ethereum) {
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      if (accounts && accounts.length > 0) {
+        walletAddress = accounts[0];
+      }
+    }
+
+    // Update session wallet data
+    sessionData.wallet = {
+      walletAddress: walletAddress || "No Wallet Detected",
+      walletType: walletType || "No Wallet Detected",
+      chainName: chainName || "No Wallet Detected"
+    };
+
+    // Update isWeb3User based on wallet data
+    sessionData.isWeb3User = 
+      walletAddress && walletAddress !== "" && walletAddress !== "No Wallet Detected" &&
+      walletType && walletType !== "" && walletType !== "No Wallet Detected" &&
+      chainName && chainName !== "" && chainName !== "No Wallet Detected";
+
+  } catch (error) {
+    console.error("Error updating wallet info:", error);
+    sessionData.wallet = {
+      walletAddress: "No Wallet Detected",
+      walletType: "No Wallet Detected",
+      chainName: "No Wallet Detected"
+    };
+    sessionData.isWeb3User = false;
+  }
+}
