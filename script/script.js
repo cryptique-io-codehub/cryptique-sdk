@@ -931,14 +931,25 @@ function trackEvent(eventType, eventData = {}) {
     timestamp: new Date().toISOString(),
     version: VERSION,
   };
+  
+  // Use fetch with explicit CORS mode
   fetch(API_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    mode: "cors",
+    headers: { 
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
     body: JSON.stringify({ payload, sessionData }),
   })
-    .then((res) => res.json())
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+      return res.json();
+    })
     .then((result) => console.log("API Response:", result))
-    .catch((error) => console.error("Error:", error));
+    .catch((error) => console.error("Error tracking event:", error));
 }
 
 // 🚀 Initialization

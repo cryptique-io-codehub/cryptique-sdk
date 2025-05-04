@@ -8,6 +8,22 @@
     ],
     "routes": [
       {
+        "src": "/scripts/(.*)",
+        "headers": {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Accept",
+          "Cache-Control": "max-age=3600",
+          "Content-Type": "application/javascript"
+        },
+        "continue": true
+      },
+      {
+        "src": "/scripts/(.*)",
+        "methods": ["OPTIONS"],
+        "status": 204
+      },
+      {
         "src": "/(.*)",
         "dest": "index.js"
       }
