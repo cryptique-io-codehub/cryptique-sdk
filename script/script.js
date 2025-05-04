@@ -141,14 +141,72 @@ let sessionData = {
 };
 
 function getCountryName() {
-  fetch("https://ipinfo.io/json?token=05d7fac5c0c506")
-    .then((res) => res.json())
-    .then((data) => {
-      countryName = data.country;
-      sessionData.country = countryName;
+  // Set a default value in case of failure
+  let countryName = "";
+  
+  // Add a timeout option to the fetch call
+  const fetchOptions = {
+    method: 'GET',
+    mode: 'cors',
+    cache: 'no-cache',
+    headers: {
+      'Accept': 'application/json'
+    },
+    // Force HTTP/1.1 by disabling HTTP/2 and HTTP/3
+    cache: 'no-store',
+    redirect: 'follow',
+    referrerPolicy: 'no-referrer'
+  };
+  
+  // Create a timeout promise
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Geolocation request timed out')), 3000);
+  });
+  
+  // First try the primary call with a timeout
+  Promise.race([
+    fetch("https://ipinfo.io/json?token=05d7fac5c0c506", fetchOptions),
+    timeoutPromise
+  ])
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error(`HTTP error: ${res.status}`);
+      }
+      return res.json();
     })
-    .catch((err) => console.error("Error:", err));
-  return countryName;
+    .then((data) => {
+      if (data && data.country) {
+        countryName = data.country;
+        sessionData.country = countryName;
+      }
+    })
+    .catch((err) => {
+      console.error("Primary geolocation error:", err);
+      
+      // Fall back to a different method - explicitly use HTTP/1.1
+      const backupUrl = "https://ipinfo.io/json?token=05d7fac5c0c506&http=1.1";
+      
+      fetch(backupUrl, fetchOptions)
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP error: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (data && data.country) {
+            countryName = data.country;
+            sessionData.country = countryName;
+          }
+        })
+        .catch((backupErr) => {
+          console.error("Backup geolocation error:", backupErr);
+          // Set a fallback value
+          sessionData.country = "Unknown";
+        });
+    });
+  
+  return countryName || "Unknown";
 }
 
 // Function to get the proper referrer, prioritizing UTM data
@@ -621,7 +679,7 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 // Update beforeunload event handler with better error handling
-window.addEventListener("beforeunload", () => {
+window.addEventListener("beforeunload", (event) => {
   try {
     console.log("Sending final session data...");
     
@@ -695,22 +753,68 @@ window.addEventListener("beforeunload", () => {
       }
     }
     
-    // Send the complete session data only if navigator.sendBeacon is available
+    // Prepare a minimal data version for fallback
+    const minimalSessionData = {
+      sessionId: sessionData.sessionId,
+      siteId: sessionData.siteId,
+      userId: sessionData.userId,
+      startTime: sessionData.startTime,
+      endTime: sessionData.endTime,
+      duration: sessionData.duration,
+      pagesViewed: sessionData.pagesViewed,
+      isBounce: sessionData.isBounce,
+      country: sessionData.country || "Unknown"
+    };
+    
+    // Try multiple methods of sending data, with progressively simpler data
+    // First attempt: Use sendBeacon with full data
+    let beaconSuccess = false;
     if (navigator.sendBeacon) {
       try {
-        console.log("Final session data:", sessionData);
-        navigator.sendBeacon(API_URL, JSON.stringify({ sessionData }));
+        console.log("Using sendBeacon with full data");
+        beaconSuccess = navigator.sendBeacon(API_URL, JSON.stringify({ sessionData }));
+        if (!beaconSuccess) {
+          console.warn("sendBeacon failed, will try alternatives");
+        }
       } catch (beaconError) {
         console.error("Error sending beacon:", beaconError);
       }
-    } else {
-      console.warn("sendBeacon not supported, using fetch instead");
-      fetch(API_URL, {
-        method: "POST",
-        keepalive: true,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionData })
-      }).catch(e => console.error("Error sending final data:", e));
+    }
+    
+    // Second attempt: Use fetch with keepalive if sendBeacon failed or isn't available
+    if (!beaconSuccess) {
+      try {
+        console.log("Using fetch with keepalive");
+        // Don't wait for the promise - it will execute in the background with keepalive
+        fetch(API_URL, {
+          method: "POST",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionData })
+        });
+      } catch (fetchError) {
+        console.error("Error with fetch:", fetchError);
+        
+        // Third attempt: Try with minimal data as a last resort
+        try {
+          fetch(API_URL, {
+            method: "POST",
+            keepalive: true,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionData: minimalSessionData })
+          });
+        } catch (minimalFetchError) {
+          console.error("All data sending methods failed:", minimalFetchError);
+        }
+      }
+    }
+    
+    // Store the session data in localStorage as a last-resort backup
+    // that can be sent on next page load if everything else fails
+    try {
+      localStorage.setItem('cryptique_last_session', JSON.stringify(sessionData));
+    } catch (storageError) {
+      console.error("Failed to store session backup:", storageError);
     }
     
     // Clear the timer if it exists
@@ -872,7 +976,8 @@ async function detectChainName() {
 }
 
 function trackEvent(eventType, eventData = {}) {
-  userSession.country = getCountryName();
+  // Don't call getCountryName() synchronously here as it won't have results immediately
+  // Instead use the current value in sessionData, which will be populated asynchronously
   
   // Get latest session info from storage
   const storedSession = sessionStorage.getItem('cryptique_session');
@@ -924,7 +1029,7 @@ function trackEvent(eventType, eventData = {}) {
       deviceType: userSession.deviceType,
       resolution: userSession.resolution,
       language: userSession.language,
-      country: userSession.country,
+      country: sessionData.country || userSession.country || "Unknown",
       pageVisits: sessionData.pageVisits,
       walletConnected: sessionData.walletConnected  // Add to event data as well
     },
@@ -932,8 +1037,8 @@ function trackEvent(eventType, eventData = {}) {
     version: VERSION,
   };
   
-  // Use fetch with explicit CORS mode
-  fetch(API_URL, {
+  // Use fetch with explicit CORS mode and reliability options
+  const fetchOptions = {
     method: "POST",
     mode: "cors",
     headers: { 
@@ -941,7 +1046,23 @@ function trackEvent(eventType, eventData = {}) {
       "Accept": "application/json"
     },
     body: JSON.stringify({ payload, sessionData }),
-  })
+    // Additional reliability options
+    cache: 'no-store',
+    redirect: 'follow',
+    referrerPolicy: 'no-referrer',
+    keepalive: true // Keep the request alive even if page unloads
+  };
+  
+  // Create a timeout promise for the tracking endpoint
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Tracking request timed out')), 5000);
+  });
+  
+  // Race the fetch against a timeout
+  Promise.race([
+    fetch(API_URL, fetchOptions),
+    timeoutPromise
+  ])
     .then((res) => {
       if (!res.ok) {
         throw new Error(`HTTP error! Status: ${res.status}`);
@@ -949,21 +1070,97 @@ function trackEvent(eventType, eventData = {}) {
       return res.json();
     })
     .then((result) => console.log("API Response:", result))
-    .catch((error) => console.error("Error tracking event:", error));
+    .catch((error) => {
+      console.error("Error tracking event:", error);
+      
+      // Fallback to a simpler version or retry with different options if needed
+      if (error.message.includes('timed out')) {
+        // Try one more time with a simpler payload
+        const simplifiedPayload = {
+          siteId: SITE_ID,
+          userId: userSession.userId,
+          sessionId: sessionData.sessionId,
+          type: eventType,
+          pagePath: window.location.pathname,
+          timestamp: new Date().toISOString(),
+          version: VERSION
+        };
+        
+        // Simple retry with minimal data
+        fetch(API_URL, {
+          method: "POST",
+          mode: "cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payload: simplifiedPayload }),
+          keepalive: true
+        }).catch(retryErr => console.error("Retry also failed:", retryErr));
+      }
+    });
 }
 
 // 🚀 Initialization
 function initCryptiqueAnalytics() {
-    setupWalletTracking();
-    getCountryName();
-    startSessionTracking();
-  trackPageView();
+  // Check for any unsent session data from previous page loads
+  try {
+    const lastSession = localStorage.getItem('cryptique_last_session');
+    if (lastSession) {
+      const lastSessionData = JSON.parse(lastSession);
+      console.log("Found unsent session data from previous visit, sending now...");
+      
+      // Send the stored session data
+      fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionData: lastSessionData })
+      })
+      .then(() => {
+        // Clear the stored session data only if the send was successful
+        localStorage.removeItem('cryptique_last_session');
+        console.log("Successfully sent previous session data");
+      })
+      .catch(e => console.error("Error sending previous session data:", e));
+    }
+  } catch (error) {
+    console.error("Error checking for previous session data:", error);
+  }
+  
+  // First try to get geolocation data - do this before anything else
+  // This gives the async call time to complete
+  getCountryName();
+  
+  // Setup wallet tracking
+  setupWalletTracking();
+  
+  // Start session tracking
+  startSessionTracking();
+  
+  // Track initial page view (after a small delay to allow geolocation)
+  setTimeout(() => {
+    trackPageView();
+  }, 500);
 }
 
-// Start Analytics
-loadWeb3Script(() => {
-  initCryptiqueAnalytics();
-});
+// Start Analytics as soon as possible
+try {
+  // Start geolocation immediately to give it time
+  getCountryName();
+  
+  // Load Web3 script if needed
+  loadWeb3Script(() => {
+    initCryptiqueAnalytics();
+  });
+} catch (error) {
+  console.error("Error initializing analytics:", error);
+  
+  // Fallback initialization without Web3
+  try {
+    getCountryName();
+    startSessionTracking();
+    setTimeout(() => trackPageView(), 500);
+  } catch (fallbackError) {
+    console.error("Fallback initialization also failed:", fallbackError);
+  }
+}
 
 // Updated for Vercel deployment - timestamp: 2023-07-19
 
