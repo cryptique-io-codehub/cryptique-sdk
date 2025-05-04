@@ -141,7 +141,7 @@ let sessionData = {
 };
 
 function getCountryName() {
-  fetch("https://ipinfo.io/14.139.196.236?token=05d7fac5c0c506")
+  fetch("https://ipinfo.io/json?token=05d7fac5c0c506")
     .then((res) => res.json())
     .then((data) => {
       countryName = data.country;
