@@ -384,9 +384,10 @@ if (window.CryptiqueSDK) {
 
   function trackPageVisit() {
     try {
-      // Get current path
+      // Get current path and URL information
       const currentPath = window.location.pathname + window.location.search;
       const currentUrl = window.location.href;
+      const currentTimestamp = new Date().toISOString();
       
       // Get current session info
       const storedSession = sessionStorage.getItem('cryptique_session');
@@ -431,13 +432,29 @@ if (window.CryptiqueSDK) {
       
       // Only add new page visit if it's not a refresh or duplicate
       if (!alreadyVisited) {
-        // Create page visit entry
+        // Create page visit entry in the format expected by the backend
         const pageVisit = {
           url: currentUrl,
           title: document.title,
           path: currentPath,
-          timestamp: new Date().toISOString()
+          timestamp: currentTimestamp,
+          duration: 0, // Will be updated later
+          isEntry: session.sessionData.pageVisits.length === 0,
+          isExit: true // Mark as exit until another page is viewed
         };
+        
+        // If this isn't the first page, update the previous page's isExit and calculate duration
+        if (session.sessionData.pageVisits.length > 0) {
+          const previousPage = session.sessionData.pageVisits[session.sessionData.pageVisits.length - 1];
+          previousPage.isExit = false;
+          
+          // Calculate duration of previous page if possible
+          if (previousPage.timestamp) {
+            const prevTimestamp = new Date(previousPage.timestamp);
+            const currentTime = new Date(currentTimestamp);
+            previousPage.duration = Math.floor((currentTime - prevTimestamp) / 1000);
+          }
+        }
         
         // Add to sessionData pageVisits
         session.sessionData.pageVisits.push(pageVisit);
@@ -451,6 +468,15 @@ if (window.CryptiqueSDK) {
         // Sync with our working sessionData object
         sessionData.pageVisits = session.sessionData.pageVisits;
         sessionData.pagesViewed = session.sessionData.pageVisits.length;
+        
+        // Format visitedPages array for backend
+        sessionData.visitedPages = session.sessionData.pageVisits.map((visit, index) => ({
+          path: visit.path || visit.url,
+          timestamp: new Date(visit.timestamp),
+          duration: visit.duration || 0,
+          isEntry: visit.isEntry || (index === 0),
+          isExit: visit.isExit || (index === session.sessionData.pageVisits.length - 1)
+        }));
         
         // Calculate current duration
         const currentTime = new Date();
@@ -638,6 +664,24 @@ if (window.CryptiqueSDK) {
           
           sessionStorage.setItem('cryptique_session', JSON.stringify(updatedSession));
           
+          // Ensure visitedPages array is properly formatted for backend
+          if (sessionData.pageVisits && Array.isArray(sessionData.pageVisits)) {
+            // Format the visitedPages array in the expected format for the backend
+            sessionData.visitedPages = sessionData.pageVisits.map((visit, index) => ({
+              path: visit.path || visit.url,
+              timestamp: new Date(visit.timestamp),
+              duration: visit.duration || 60, // Default duration if not available
+              isEntry: index === 0,
+              isExit: index === sessionData.pageVisits.length - 1
+            }));
+            
+            // Make sure pagesViewed count matches visitedPages length
+            sessionData.pagesViewed = sessionData.visitedPages.length;
+          } else if (!sessionData.visitedPages) {
+            // Initialize visitedPages as empty array if missing
+            sessionData.visitedPages = [];
+          }
+          
           // Send data to server
           fetch(API_URL, {
             method: "POST",
@@ -722,6 +766,15 @@ if (window.CryptiqueSDK) {
             if (session.sessionData.pageVisits) {
               sessionData.pageVisits = session.sessionData.pageVisits;
               sessionData.pagesViewed = session.sessionData.pageVisits.length;
+              
+              // Format visitedPages array for backend
+              sessionData.visitedPages = session.sessionData.pageVisits.map((visit, index) => ({
+                path: visit.path || visit.url,
+                timestamp: new Date(visit.timestamp),
+                duration: visit.duration || 0,
+                isEntry: visit.isEntry || (index === 0),
+                isExit: visit.isExit || (index === session.sessionData.pageVisits.length - 1)
+              }));
             }
           }
         } catch (parseError) {
