@@ -6,7 +6,7 @@ if (window.CryptiqueSDK) {
   window.CryptiqueSDK = { initialized: true };
 
   const API_URL = "https://cryptique-backend.vercel.app/api/sdk/track";
-  const VERSION = "v0.11.22";
+  const VERSION = "v0.11.23";
   const CONSENT_STORAGE_KEY = "mtm_consent";
   const USER_ID_KEY = "mtm_user_id";
   const analyticsScript =
@@ -231,6 +231,9 @@ if (window.CryptiqueSDK) {
 
   function getOrCreateSessionId() {
     try {
+      // Always ensure we have the correct user ID before any session operations
+      const persistentUserId = getOrCreateUserId();
+      
       const storedSession = sessionStorage.getItem('cryptique_session');
       if (storedSession) {
         const session = JSON.parse(storedSession);
@@ -239,6 +242,13 @@ if (window.CryptiqueSDK) {
         if (now - session.lastActivity < 120000) {
           // Update last activity time but preserve other data
           session.lastActivity = now;
+          
+          // CRITICAL FIX: Ensure the userId is always consistent
+          // This ensures that UTM parameters don't cause user ID changes
+          if (!session.userId || session.userId !== persistentUserId) {
+            session.userId = persistentUserId;
+          }
+          
           sessionStorage.setItem('cryptique_session', JSON.stringify(session));
           
           // If we have existing session data, load it
@@ -248,6 +258,9 @@ if (window.CryptiqueSDK) {
               sessionData.pageVisits = session.sessionData.pageVisits;
               sessionData.pagesViewed = session.sessionData.pageVisits.length;
             }
+            
+            // CRITICAL FIX: Ensure the user ID is consistent here too
+            sessionData.userId = persistentUserId;
             
             // Keep the original startTime from the first page
             if (session.sessionData.startTime) {
@@ -279,9 +292,13 @@ if (window.CryptiqueSDK) {
       sessionData.referrer = getProperReferrer();
       sessionData.isFirstPage = true;
       
+      // CRITICAL FIX: Always ensure userId is set from localStorage, not regenerated
+      sessionData.userId = persistentUserId;
+      
       // Initialize with empty pageVisits array
       sessionStorage.setItem('cryptique_session', JSON.stringify({
         id: newSessionId,
+        userId: persistentUserId, // CRITICAL FIX: Store userId in session
         lastActivity: Date.now(),
         pageViews: 0,
         lastPath: window.location.pathname + window.location.search,
@@ -289,13 +306,16 @@ if (window.CryptiqueSDK) {
           pageVisits: [],
           startTime: sessionData.startTime,
           referrer: sessionData.referrer,
-          utmData: sessionData.utmData
+          utmData: sessionData.utmData,
+          userId: persistentUserId // CRITICAL FIX: Also store in sessionData
         }
       }));
       
       return newSessionId;
     } catch (error) {
       console.error("Error in getOrCreateSessionId:", error);
+      // CRITICAL FIX: Even on error, ensure we have a valid userId
+      sessionData.userId = getOrCreateUserId();
       return generateSessionId(); // Fallback
     }
   }
@@ -508,6 +528,11 @@ if (window.CryptiqueSDK) {
 
   function startSessionTracking() {
     try {
+      // CRITICAL FIX: Always ensure we have the correct user ID before any operations
+      const persistentUserId = getOrCreateUserId();
+      sessionData.userId = persistentUserId; 
+      userSession.userId = persistentUserId;
+      
       // Initialize session storage if needed
       if (!sessionStorage.getItem('cryptique_session')) {
         const currentPath = window.location.pathname + window.location.search;
@@ -518,6 +543,7 @@ if (window.CryptiqueSDK) {
         
         sessionStorage.setItem('cryptique_session', JSON.stringify({
           id: sessionData.sessionId,
+          userId: persistentUserId, // CRITICAL FIX: Store userId in session
           lastActivity: Date.now(),
           pageViews: 0,
           lastPath: currentPath,
@@ -525,7 +551,8 @@ if (window.CryptiqueSDK) {
             pageVisits: [],
             startTime: sessionData.startTime,
             referrer: sessionData.referrer,
-            utmData: sessionData.utmData
+            utmData: sessionData.utmData,
+            userId: persistentUserId // CRITICAL FIX: Also store in sessionData
           }
         }));
       }
@@ -535,8 +562,17 @@ if (window.CryptiqueSDK) {
       if (sessionStr) {
         const session = JSON.parse(sessionStr);
         
+        // CRITICAL FIX: Always ensure userId is consistent
+        if (!session.userId || session.userId !== persistentUserId) {
+          session.userId = persistentUserId;
+          sessionStorage.setItem('cryptique_session', JSON.stringify(session));
+        }
+        
         // Sync session data with our working object
         if (session.sessionData) {
+          // CRITICAL FIX: Always ensure userId is consistent in sessionData
+          sessionData.userId = persistentUserId;
+          
           // Keep original startTime from first page
           if (session.sessionData.startTime) {
             sessionData.startTime = session.sessionData.startTime;
