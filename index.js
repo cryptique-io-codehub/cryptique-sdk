@@ -27,9 +27,16 @@ app.use((req, res, next) => {
 
 app.use(bodyParser.json());
 
+// Serve the main tracking script
 app.get("/scripts/analytics/1.0.1/cryptique.script.min.js", (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.sendFile(__dirname + "/script/script.js");
+});
+
+// Serve the events extension script
+app.get("/scripts/analytics/1.0.1/cryptique.events.min.js", (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.sendFile(__dirname + "/script/cryptique-events.js");
 });
 
 app.listen(PORT, () => {
