@@ -924,12 +924,16 @@ if (window.CryptiqueSDK) {
 
   function setupWalletTracking() {
     if (window.ethereum) {
+      // Change from eth_requestAccounts to eth_accounts to avoid prompting the user
       window.ethereum
-        .request({ method: "eth_requestAccounts" })
+        .request({ method: "eth_accounts" })
         .then((accounts) => {
           if (accounts.length > 0) {
             userSession.walletAddresses = accounts;
           }
+        })
+        .catch(error => {
+          console.log("Error getting accounts:", error);
         });
     }
   }
@@ -958,9 +962,18 @@ if (window.CryptiqueSDK) {
       if (window.ethereum.isTronLink) {
         detectedWallets.push("TronLink");
       }
+      
+      // If any specific wallet wasn't detected but ethereum object exists,
+      // add a generic "Web3 Wallet" entry
+      if (detectedWallets.length === 0) {
+        detectedWallets.push("Web3 Wallet");
+      }
+      
       //return a boolean value if the wallet is detected
       return detectedWallets.length > 0;
     }
+    // No ethereum object means no wallet
+    return false;
   }
   function detectWalletType() {
     if (window.ethereum) {
@@ -1010,8 +1023,12 @@ if (window.CryptiqueSDK) {
         return "No Wallet Detected";
       }
 
-      // Request access to the user's accounts.
-      await provider.request({ method: "eth_requestAccounts" });
+      // First try to get chainId directly from provider if available
+      // This works even if the user hasn't connected their wallet
+      if (provider.chainId) {
+        const networkId = parseInt(provider.chainId, 16);
+        return getChainNameFromId(networkId);
+      }
 
       // Ensure Web3 is available
       if (typeof Web3 === "undefined") {
@@ -1021,54 +1038,71 @@ if (window.CryptiqueSDK) {
       // Initialize Web3 with the provider.
       const web3 = new Web3(provider);
 
-      // Get the connected accounts.
+      // Try to get accounts without prompting
       const accounts = await web3.eth.getAccounts();
       if (accounts.length === 0) {
-        return "No accounts found";
+        // We have a wallet but no connected accounts
+        // Try to get the network ID directly without needing accounts
+        try {
+          const networkId = await web3.eth.net.getId();
+          return getChainNameFromId(networkId);
+        } catch (netIdError) {
+          // If we can't get network ID, try to get chainId from provider
+          if (provider.chainId) {
+            const networkId = parseInt(provider.chainId, 16);
+            return getChainNameFromId(networkId);
+          }
+          return "Not Connected";
+        }
       }
 
-      // Get the network ID (chain ID).
+      // If we have accounts, get the network ID
       const networkId = await web3.eth.net.getId();
-      let chainName = "Unknown";
-
-      // Map network IDs to chain names.
-      switch (networkId) {
-        case 1:
-          chainName = "Ethereum Mainnet";
-          break;
-        case 56:
-          chainName = "Binance Smart Chain";
-          break;
-        case 137:
-          chainName = "Polygon";
-          break;
-        case 10:
-          chainName = "Optimism";
-          break;
-        case 42161:
-          chainName = "Arbitrum One";
-          break;
-        case 250:
-          chainName = "Fantom Opera";
-          break;
-        case 43114:
-          chainName = "Avalanche";
-          break;
-        case 100:
-          chainName = "xDai";
-          break;
-        case 1313161554:
-          chainName = "Aurora";
-          break;
-        default:
-          chainName = `Unknown (ID: ${networkId})`;
-      }
-
-      return chainName;
+      return getChainNameFromId(networkId);
     } catch (error) {
       console.error("Error detecting chain name:", error);
       return "Error";
     }
+  }
+
+  // Helper function to get chain name from network ID
+  function getChainNameFromId(networkId) {
+    let chainName = "Unknown";
+
+    // Map network IDs to chain names.
+    switch (networkId) {
+      case 1:
+        chainName = "Ethereum Mainnet";
+        break;
+      case 56:
+        chainName = "Binance Smart Chain";
+        break;
+      case 137:
+        chainName = "Polygon";
+        break;
+      case 10:
+        chainName = "Optimism";
+        break;
+      case 42161:
+        chainName = "Arbitrum One";
+        break;
+      case 250:
+        chainName = "Fantom Opera";
+        break;
+      case 43114:
+        chainName = "Avalanche";
+        break;
+      case 100:
+        chainName = "xDai";
+        break;
+      case 1313161554:
+        chainName = "Aurora";
+        break;
+      default:
+        chainName = `Unknown (ID: ${networkId})`;
+    }
+
+    return chainName;
   }
 
   function trackEvent(eventType, eventData = {}) {
@@ -1263,49 +1297,55 @@ if (window.CryptiqueSDK) {
   async function updateWalletInfo() {
     try {
       const walletType = detectWalletType();
-      const chainName = await detectChainName();
+      let chainName = "Not Connected";
       let walletAddress = "";
+      let isConnected = false;
 
       if (window.ethereum) {
         try {
-          const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+          // Only check for existing accounts, don't prompt
+          const accounts = await window.ethereum.request({ method: "eth_accounts" });
+          
+          // If accounts exist, the wallet is connected
           if (accounts && accounts.length > 0) {
             walletAddress = accounts[0];
+            isConnected = true;
+            
+            // Only try to get chain information if we have a connected account
+            try {
+              chainName = await detectChainName();
+            } catch (chainError) {
+              console.log("Error getting chain name:", chainError);
+              chainName = "Unknown Chain";
+            }
+          } else {
+            // Wallet exists but not connected
+            walletAddress = "";
+            chainName = "Not Connected";
+            isConnected = false;
           }
         } catch (accountError) {
           console.log("Error getting accounts:", accountError);
+          walletAddress = "";
+          chainName = "Error";
+          isConnected = false;
         }
       }
 
       // Update session wallet data
       sessionData.wallet = {
-        walletAddress: walletAddress || "No Wallet Detected",
+        walletAddress: walletAddress || "No Wallet Connected",
         walletType: walletType || "No Wallet Detected",
-        chainName: chainName || "No Wallet Detected"
+        chainName: chainName || "No Chain Detected"
       };
 
       // Update wallet connection status - only true if we have a valid wallet address
-      const isWalletConnected = walletAddress && 
-                              walletAddress !== "" && 
-                              walletAddress !== "No Wallet Detected";
-      
-      sessionData.walletConnected = isWalletConnected;
-      userSession.walletConnected = isWalletConnected;
+      sessionData.walletConnected = isConnected;
+      userSession.walletConnected = isConnected;
 
-      // Update isWeb3User if ANY wallet property is non-default
-      const hasWalletAddress = walletAddress && 
-                             walletAddress !== "" && 
-                             walletAddress !== "No Wallet Detected";
-      
-      const hasWalletType = walletType && 
-                           walletType !== "" && 
-                           walletType !== "No Wallet Detected";
-      
-      const hasChainName = chainName && 
-                          chainName !== "" && 
-                          chainName !== "No Wallet Detected";
-
-      sessionData.isWeb3User = hasWalletAddress || hasWalletType || hasChainName;
+      // Set isWeb3User to true if a wallet is DETECTED, even if not connected
+      // This separates "has wallet" from "is connected"
+      sessionData.isWeb3User = walletType !== "No Wallet Detected";
 
       // Log the result for debugging
       console.log("Wallet Status:", {
