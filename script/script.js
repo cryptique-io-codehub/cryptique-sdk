@@ -665,20 +665,14 @@ if (window.CryptiqueSDK) {
           // Update wallet data
           try {
             await updateWalletInfo();
+            // Use the values already set by updateWalletInfo() instead of doing separate checks
+            sessionData.wallet.chainName = sessionData.wallet.chainName;
+            if (userSession.walletAddresses && userSession.walletAddresses.length > 0) {
+              sessionData.wallet.walletAddress = userSession.walletAddresses[0];
+            }
+            // We already set walletType in updateWalletInfo()
           } catch (walletError) {
             console.error("Error setting up wallet tracking:", walletError);
-          }
-          
-          sessionData.wallet.chainName = chainName;
-          if (userSession.walletAddresses && userSession.walletAddresses.length > 0) {
-            sessionData.wallet.walletAddress = userSession.walletAddresses[0];
-          }
-          
-          try {
-            sessionData.wallet.walletType = detectWalletType();
-          } catch (walletTypeError) {
-            console.error("Error detecting wallet type:", walletTypeError);
-            sessionData.wallet.walletType = "Unknown";
           }
           
           // Update activity time
@@ -939,38 +933,50 @@ if (window.CryptiqueSDK) {
   }
   function detectWallets() {
     let detectedWallets = []; // Array to store detected wallet names.
+    
+    // First check if ethereum object exists in the window
     if (window.ethereum) {
-      // Check for specific wallet properties to identify them.
-      if (window.ethereum.isMetaMask) {
-        detectedWallets.push("MetaMask");
+      // Try to get accounts without prompting the user
+      try {
+        // Use a synchronous check first just to populate detectedWallets
+        // Check for specific wallet properties to identify them.
+        if (window.ethereum.isMetaMask) {
+          detectedWallets.push("MetaMask");
+        }
+        if (window.ethereum.isTrustWallet) {
+          detectedWallets.push("Trust Wallet");
+        }
+        if (window.ethereum.isCoinbaseWallet) {
+          detectedWallets.push("Coinbase Wallet");
+        }
+        if (window.ethereum.isBraveWallet) {
+          detectedWallets.push("Brave Wallet");
+        }
+        if (window.ethereum.isFrame) {
+          detectedWallets.push("Frame");
+        }
+        if (window.ethereum.isPhantom) {
+          detectedWallets.push("Phantom");
+        }
+        if (window.ethereum.isTronLink) {
+          detectedWallets.push("TronLink");
+        }
+        
+        // If any specific wallet wasn't detected but ethereum object exists,
+        // add a generic "Web3 Wallet" entry
+        if (detectedWallets.length === 0) {
+          detectedWallets.push("Web3 Wallet");
+        }
+        
+        // Key change: Don't just return true if wallets are detected
+        // Instead, check if we have user accounts to determine if the wallet is actually connected
+        // This is the async part that will be resolved in updateWalletInfo
+        // Here we're just returning if we have detected wallets, but not making claims about connection state
+        return detectedWallets.length > 0;
+      } catch (error) {
+        console.error("Error in detectWallets:", error);
+        return false;
       }
-      if (window.ethereum.isTrustWallet) {
-        detectedWallets.push("Trust Wallet");
-      }
-      if (window.ethereum.isCoinbaseWallet) {
-        detectedWallets.push("Coinbase Wallet");
-      }
-      if (window.ethereum.isBraveWallet) {
-        detectedWallets.push("Brave Wallet");
-      }
-      if (window.ethereum.isFrame) {
-        detectedWallets.push("Frame");
-      }
-      if (window.ethereum.isPhantom) {
-        detectedWallets.push("Phantom");
-      }
-      if (window.ethereum.isTronLink) {
-        detectedWallets.push("TronLink");
-      }
-      
-      // If any specific wallet wasn't detected but ethereum object exists,
-      // add a generic "Web3 Wallet" entry
-      if (detectedWallets.length === 0) {
-        detectedWallets.push("Web3 Wallet");
-      }
-      
-      //return a boolean value if the wallet is detected
-      return detectedWallets.length > 0;
     }
     // No ethereum object means no wallet
     return false;
@@ -1067,42 +1073,42 @@ if (window.CryptiqueSDK) {
 
   // Helper function to get chain name from network ID
   function getChainNameFromId(networkId) {
-    let chainName = "Unknown";
+      let chainName = "Unknown";
 
-    // Map network IDs to chain names.
-    switch (networkId) {
-      case 1:
-        chainName = "Ethereum Mainnet";
-        break;
-      case 56:
-        chainName = "Binance Smart Chain";
-        break;
-      case 137:
-        chainName = "Polygon";
-        break;
-      case 10:
-        chainName = "Optimism";
-        break;
-      case 42161:
-        chainName = "Arbitrum One";
-        break;
-      case 250:
-        chainName = "Fantom Opera";
-        break;
-      case 43114:
-        chainName = "Avalanche";
-        break;
-      case 100:
-        chainName = "xDai";
-        break;
-      case 1313161554:
-        chainName = "Aurora";
-        break;
-      default:
-        chainName = `Unknown (ID: ${networkId})`;
-    }
+      // Map network IDs to chain names.
+      switch (networkId) {
+        case 1:
+          chainName = "Ethereum Mainnet";
+          break;
+        case 56:
+          chainName = "Binance Smart Chain";
+          break;
+        case 137:
+          chainName = "Polygon";
+          break;
+        case 10:
+          chainName = "Optimism";
+          break;
+        case 42161:
+          chainName = "Arbitrum One";
+          break;
+        case 250:
+          chainName = "Fantom Opera";
+          break;
+        case 43114:
+          chainName = "Avalanche";
+          break;
+        case 100:
+          chainName = "xDai";
+          break;
+        case 1313161554:
+          chainName = "Aurora";
+          break;
+        default:
+          chainName = `Unknown (ID: ${networkId})`;
+      }
 
-    return chainName;
+      return chainName;
   }
 
   function trackEvent(eventType, eventData = {}) {
@@ -1131,10 +1137,12 @@ if (window.CryptiqueSDK) {
       sessionStorage.setItem('cryptique_session', JSON.stringify(session));
     }
     
-    // Update wallet info before sending event
-    const walletType = detectWalletType();
-    if (walletType !== "No Wallet Detected") {
-      sessionData.isWeb3User = true;
+    // Update wallet info before sending event - but don't override isWeb3User flag here
+    // Instead, call updateWalletInfo() which properly sets the flag with full validation
+    try {
+      updateWalletInfo();
+    } catch (walletError) {
+      console.error("Error updating wallet info in trackEvent:", walletError);
     }
     
     const payload = {
@@ -1343,9 +1351,13 @@ if (window.CryptiqueSDK) {
       sessionData.walletConnected = isConnected;
       userSession.walletConnected = isConnected;
 
-      // Set isWeb3User to true if a wallet is DETECTED, even if not connected
-      // This separates "has wallet" from "is connected"
-      sessionData.isWeb3User = walletType !== "No Wallet Detected";
+      // FIX: Set isWeb3User based on actual wallet connection or valid wallet data
+      // Only consider a user a Web3 user if they meet one of these criteria:
+      // 1. They have a connected wallet with a valid address
+      // 2. They have interacted with the ethereum object in a way that confirms web3 usage
+      sessionData.isWeb3User = isConnected || 
+                               (walletAddress && walletAddress.trim() !== "" && walletAddress !== "No Wallet Connected") ||
+                               (chainName && chainName !== "Not Connected" && chainName !== "No Chain Detected" && chainName !== "Error");
 
       // Log the result for debugging
       console.log("Wallet Status:", {
