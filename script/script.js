@@ -1137,8 +1137,8 @@ if (window.CryptiqueSDK) {
       sessionStorage.setItem('cryptique_session', JSON.stringify(session));
     }
     
-    // Update wallet info before sending event - but don't override isWeb3User flag here
-    // Instead, call updateWalletInfo() which properly sets the flag with full validation
+    // Update wallet info without resetting isWeb3User - call our full update function
+    // which properly handles all wallet detection cases
     try {
       updateWalletInfo();
     } catch (walletError) {
@@ -1351,13 +1351,27 @@ if (window.CryptiqueSDK) {
       sessionData.walletConnected = isConnected;
       userSession.walletConnected = isConnected;
 
-      // FIX: Set isWeb3User based on actual wallet connection or valid wallet data
-      // Only consider a user a Web3 user if they meet one of these criteria:
+      // List of actual wallet types that indicate a web3 user even if not connected
+      const validWalletTypes = [
+        "MetaMask", 
+        "Trust Wallet", 
+        "Coinbase Wallet", 
+        "Brave Wallet", 
+        "Frame", 
+        "Phantom", 
+        "TronLink", 
+        "Web3 Wallet"
+      ];
+
+      // Set isWeb3User based on wallet detection OR connection
+      // A user is considered a Web3 user if any of these criteria are met:
       // 1. They have a connected wallet with a valid address
-      // 2. They have interacted with the ethereum object in a way that confirms web3 usage
+      // 2. They have a recognized wallet type installed, even if not connected
+      // 3. They have interacted with the ethereum object in a way that confirms web3 usage
       sessionData.isWeb3User = isConnected || 
-                               (walletAddress && walletAddress.trim() !== "" && walletAddress !== "No Wallet Connected") ||
-                               (chainName && chainName !== "Not Connected" && chainName !== "No Chain Detected" && chainName !== "Error");
+                             (walletAddress && walletAddress.trim() !== "" && walletAddress !== "No Wallet Connected") ||
+                             (chainName && chainName !== "Not Connected" && chainName !== "No Chain Detected" && chainName !== "Error") ||
+                             (validWalletTypes.includes(walletType));
 
       // Log the result for debugging
       console.log("Wallet Status:", {
