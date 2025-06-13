@@ -1236,6 +1236,31 @@ if (window.CryptiqueSDK) {
       });
   }
 
+  // Track clicks on interactive elements
+  function startClickTracking() {
+    document.body.addEventListener('click', function(event) {
+      // Find the closest interactive element
+      const element = event.target.closest('a, button, [role="button"], [data-cryptique-id]');
+      
+      if (element) {
+        // Create element data object with relevant properties
+        const elementData = {
+          tagName: element.tagName.toLowerCase(),
+          id: element.id || '',
+          className: element.className || '',
+          innerText: (element.innerText || '').substring(0, 100), // Limit text length
+          href: element.tagName.toLowerCase() === 'a' ? element.href : '',
+          dataId: element.getAttribute('data-cryptique-id') || ''
+        };
+        
+        // Track the click event
+        trackEvent('ELEMENT_CLICK', elementData);
+      }
+    });
+    
+    console.log('Cryptique click tracking initialized');
+  }
+
   // 🚀 Initialization
   function initCryptiqueAnalytics() {
     // Check for any unsent session data from previous page loads
@@ -1271,6 +1296,9 @@ if (window.CryptiqueSDK) {
     
     // Start session tracking
     startSessionTracking();
+    
+    // Start click tracking
+    startClickTracking();
     
     // Track initial page view (after a small delay to allow geolocation)
     setTimeout(() => {
