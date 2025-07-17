@@ -931,37 +931,12 @@ if (window.CryptiqueSDK) {
 
   // Connect wallet (to be called on user action)
   async function connectWallet() {
-    try {
-      // If Web3Modal is available, use it
-      if (window.web3Modal) {
-        const provider = await window.web3Modal.connect();
-        const web3 = new Web3(provider);
-        const accounts = await web3.eth.getAccounts();
-        
-        if (accounts.length > 0) {
-          const chainId = await web3.eth.getChainId();
-          const chainName = getChainNameFromId(chainId);
-          
-          // Update session data
-          sessionData.wallet = {
-            walletAddress: accounts[0],
-            walletType: 'WalletConnect',
-            chainName: chainName,
-            chainId: chainId
-          };
-          
-          sessionData.isWeb3User = true;
-          sessionData.walletConnected = true;
-          
-          return accounts[0];
-        }
-      }
-      
-      // Fallback to traditional web3 providers
-      if (!window.ethereum) {
-        throw new Error('No Ethereum provider found');
-      }
+    if (!window.ethereum) {
+      console.error('No Ethereum provider found');
+      return null;
+    }
 
+    try {
       // Request account access
       const accounts = await window.ethereum.request({ 
         method: 'eth_requestAccounts' 
@@ -972,11 +947,10 @@ if (window.CryptiqueSDK) {
         await updateWalletInfo();
         return accounts[0];
       }
-      
-      throw new Error('No accounts found');
+      return null;
     } catch (error) {
       console.error('Error connecting wallet:', error);
-      throw new Error('Failed to connect wallet: ' + (error.message || 'User denied account access'));
+      throw error;
     }
   }
 
@@ -1510,340 +1484,35 @@ if (window.CryptiqueSDK) {
     }
   }
 
-  // Show wallet selection modal
-  function showWalletSelector(wallets) {
-    return new Promise((resolve) => {
-      // Create modal container
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.7);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-      `;
-      
-      // Create modal content
-      const modalContent = document.createElement('div');
-      modalContent.style.cssText = `
-        background: #1e1e1e;
-        padding: 24px;
-        border-radius: 12px;
-        width: 100%;
-        max-width: 400px;
-        color: white;
-      `;
-      
-      // Add title
-      const title = document.createElement('h3');
-      title.textContent = 'Select a Wallet';
-      title.style.marginTop = '0';
-      title.style.color = 'white';
-      
-      // Create wallet list
-      const walletList = document.createElement('div');
-      walletList.style.margin = '20px 0';
-      
-      // Add each wallet as a selectable option
-      wallets.forEach(wallet => {
-        const walletButton = document.createElement('button');
-        walletButton.textContent = wallet.name;
-        walletButton.style.cssText = `
-          display: flex;
-          align-items: center;
-          width: 100%;
-          padding: 12px;
-          margin-bottom: 10px;
-          background: #2d2d2d;
-          border: 1px solid #444;
-          border-radius: 8px;
-          color: white;
-          cursor: pointer;
-          text-align: left;
-          transition: all 0.2s;
-        `;
-        
-        // Add hover effect
-        walletButton.onmouseover = () => {
-          walletButton.style.background = '#3a3a3a';
-          walletButton.style.borderColor = '#666';
-        };
-        walletButton.onmouseout = () => {
-          walletButton.style.background = '#2d2d2d';
-          walletButton.style.borderColor = '#444';
-        };
-        
-        // Handle wallet selection
-        walletButton.onclick = () => {
-          document.body.removeChild(modal);
-          resolve(wallet);
-        };
-        
-        // Add wallet icon if available
-        if (wallet.icon) {
-          const icon = document.createElement('img');
-          icon.src = wallet.icon;
-          icon.style.width = '24px';
-          icon.style.height = '24px';
-          icon.style.marginRight = '12px';
-          walletButton.prepend(icon);
-        }
-        
-        walletList.appendChild(walletButton);
-      });
-      
-      // Add cancel button
-      const cancelButton = document.createElement('button');
-      cancelButton.textContent = 'Cancel';
-      cancelButton.style.cssText = `
-        width: 100%;
-        padding: 12px;
-        background: transparent;
-        border: 1px solid #666;
-        border-radius: 8px;
-        color: #aaa;
-        cursor: pointer;
-        margin-top: 10px;
-      `;
-      
-      cancelButton.onclick = () => {
-        document.body.removeChild(modal);
-        resolve(null);
-      };
-      
-      // Assemble modal
-      modalContent.appendChild(title);
-      modalContent.appendChild(walletList);
-      modalContent.appendChild(cancelButton);
-      modal.appendChild(modalContent);
-      
-      // Add to DOM
-      document.body.appendChild(modal);
-      
-      // Close on outside click
-      modal.onclick = (e) => {
-        if (e.target === modal) {
-          document.body.removeChild(modal);
-          resolve(null);
-        }
-      };
-    });
-  }
-
-  // Get list of installed wallets
-  function getInstalledWallets() {
-    const wallets = [];
-    
-    if (window.ethereum) {
-      if (window.ethereum.isMetaMask) wallets.push({ 
-        name: 'MetaMask', 
-        id: 'metamask',
-        icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png'
-      });
-      if (window.ethereum.isTrustWallet) wallets.push({ 
-        name: 'Trust Wallet', 
-        id: 'trustwallet',
-        icon: 'https://trustwallet.com/assets/images/media/assets/TWT_icon_square_red.png'
-      });
-      if (window.ethereum.isCoinbaseWallet) wallets.push({ 
-        name: 'Coinbase Wallet', 
-        id: 'coinbase',
-        icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png'
-      });
-      // Add more wallet detections as needed
-    }
-    
-    // If no specific wallets detected but ethereum is available, add generic option
-    if (wallets.length === 0 && window.ethereum) {
-      wallets.push({
-        name: 'Browser Wallet',
-        id: 'browser',
-        icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png'
-      });
-    }
-    
-    return wallets;
-  }
-
-  // Initialize Web3Modal with WalletConnect v2
-  async function initWeb3Modal() {
-    // Only load Web3Modal if not already loaded
-    if (window.web3Modal) return;
-    
-    // Load required scripts for Web3Modal v2
-    await loadScript('https://unpkg.com/@web3modal/ethereum@^2.7.1/dist/cdn/bundle.js');
-    await loadScript('https://unpkg.com/@walletconnect/ethereum-provider@^2.9.0/dist/cdn/bundle.js');
-
-    const projectId = 'ed2fd8c26a6ef22a6c90a4f060e4addf';
-
-    // 2. Configure ethereum provider
-    const mainnet = {
-      chainId: 1,
-      name: 'Ethereum',
-      currency: 'ETH',
-      explorerUrl: 'https://etherscan.io',
-      rpcUrl: 'https://cloudflare-eth.com/'
-    }
-
-    const polygon = {
-      chainId: 137,
-      name: 'Polygon',
-      currency: 'MATIC',
-      explorerUrl: 'https://polygonscan.com',
-      rpcUrl: 'https://polygon-rpc.com/'
-    }
-
-    const arbitrum = {
-      chainId: 42161,
-      name: 'Arbitrum',
-      currency: 'ETH',
-      explorerUrl: 'https://arbiscan.io',
-      rpcUrl: 'https://arb1.arbitrum.io/rpc'
-    }
-
-    const metadata = {
-      name: 'Cryptique SDK',
-      description: 'Connect with Cryptique',
-      url: 'https://cryptique.io/',
-      icons: ['https://cryptique.io/favicon.ico']
-    }
-
-    const ethereumProvider = new window.WalletConnectEthereumProvider.EthereumProvider({
-      projectId,
-      chains: [1],
-      optionalChains: [137, 42161],
-      showQrModal: true,
-      metadata,
-      qrModalOptions: {
-        themeMode: 'dark',
-        explorerRecommendedWalletIds: 'NONE' // Show all wallets
-      }
-    });
-
-    // 4. Create a Web3Modal instance
-    window.web3Modal = new window.Web3ModalEthereum.Web3Modal({
-      projectId,
-      ethereumProvider
-    });
-  }
-
-  // Helper function to load scripts
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.type = 'module'; // <-- Important: Load as a module
-      script.src = src;
-      script.onload = () => resolve();
-      script.onerror = (error) => reject(error);
-      document.head.appendChild(script);
-    });
-  }
-
   // Handle wallet connection for a single button element
-  async function setupWalletButton(button) {
+  function setupWalletButton(button) {
     button.addEventListener('click', async (e) => {
       e.preventDefault();
-      
       try {
-        // Initialize Web3Modal
-        await initWeb3Modal();
-        
-        // Open the WalletConnect modal
-        await window.web3Modal.openModal();
-        const provider = window.web3Modal.getWalletProvider();
-
-        if (!provider) {
-          throw new Error('No provider selected');
-        }
-        
-        // Initialize Web3
-        const web3 = new Web3(provider);
-        
-        // Get accounts
-        const accounts = await web3.eth.getAccounts();
-        
-        if (accounts.length === 0) {
-          throw new Error('No accounts found');
-        }
-        
-        // Get network ID
-        const chainId = await web3.eth.getChainId();
-        const chainName = getChainNameFromId(chainId);
-        
-        // Update session data
-        sessionData.wallet = {
-          walletAddress: accounts[0],
-          walletType: 'WalletConnect',
-          chainName: chainName,
-          chainId: chainId
-        };
-        
-        sessionData.isWeb3User = true;
-        sessionData.walletConnected = true;
-        
-        // Set up event listeners for account/chain changes
-        provider.on('accountsChanged', (accounts) => {
-          if (accounts.length === 0) {
-            // Handle account disconnection
-            sessionData.wallet.walletAddress = '';
-            sessionData.walletConnected = false;
-          } else {
-            sessionData.wallet.walletAddress = accounts[0];
-          }
-          window.dispatchEvent(new CustomEvent('cryptique:accountsChanged', { 
-            detail: { accounts } 
-          }));
-        });
-        
-        provider.on('chainChanged', (chainId) => {
-          const newChainId = parseInt(chainId, 16);
-          sessionData.wallet.chainId = newChainId;
-          sessionData.wallet.chainName = getChainNameFromId(newChainId);
-          window.dispatchEvent(new CustomEvent('cryptique:chainChanged', { 
-            detail: { 
-              chainId: newChainId,
-              chainName: sessionData.wallet.chainName
-            } 
-          }));
-        });
-        
-        // Dispatch success event
+        await connectWallet();
+        // Dispatch custom event on successful connection
         window.dispatchEvent(new CustomEvent('cryptique:walletConnected', {
           detail: { 
-            address: accounts[0],
-            chain: chainName,
-            chainId: chainId,
-            provider: 'WalletConnect',
-            element: button,
-            web3: web3 // Pass web3 instance for convenience
+            address: sessionData.wallet?.walletAddress,
+            chain: sessionData.wallet?.chainName,
+            element: button // Pass the clicked element for reference
           }
         }));
-        
-        return accounts[0];
       } catch (error) {
         console.error('Wallet connection failed:', error);
         // Dispatch error event
         window.dispatchEvent(new CustomEvent('cryptique:walletError', {
           detail: { 
             error: error.message,
-            element: button
+            element: button // Pass the clicked element for reference
           }
         }));
-        throw error;
       }
     });
   }
 
   // Auto-bind to wallet connect buttons if they exist
   function setupWalletConnectButton() {
-    // Initialize Web3Modal in the background
-    initWeb3Modal().catch(console.error);
-    
     // Check for ID first
     const connectButtonById = document.getElementById('walletConnectCQ');
     if (connectButtonById) {
