@@ -1699,15 +1699,7 @@ if (window.CryptiqueSDK) {
           chainId: 1, // Default to Ethereum Mainnet
         }
       },
-      // Add other wallet providers as needed
-      // Example for Metamask
-      injected: {
-        display: {
-          name: 'Browser Wallet',
-          description: 'Connect with browser extension (MetaMask, etc.)',
-        },
-        package: null,
-      },
+      // Injected provider is now disabled to only show WalletConnect
     };
     
     // Initialize Web3Modal
@@ -1715,7 +1707,7 @@ if (window.CryptiqueSDK) {
       cacheProvider: true, // Optional - Enable cache provider
       providerOptions, // Required - Provider options
       theme: 'dark', // Optional - Theme ('dark' or 'light')
-      disableInjectedProvider: false, // Optional - Disable injected providers
+      disableInjectedProvider: true, // Set to true to hide browser wallets
     });
   }
 
