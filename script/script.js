@@ -916,29 +916,196 @@ if (window.CryptiqueSDK) {
     }
   });
 
+  // Detect all available wallet providers
+  function detectWalletProviders() {
+    const providers = [];
+    
+    // Check for multiple injected providers
+    if (window.ethereum?.providers) {
+      // Multi-injected providers case (e.g., user has multiple wallets installed)
+      return window.ethereum.providers;
+    } else if (window.ethereum) {
+      // Single injected provider
+      return [window.ethereum];
+    }
+    
+    // Check for specific wallet providers
+    if (window.trustWallet) providers.push(window.trustWallet);
+    if (window.coinbaseWalletExtension) providers.push(window.coinbaseWalletExtension);
+    if (window.phantom?.ethereum) providers.push(window.phantom.ethereum);
+    
+    return providers;
+  }
+
   // Check if wallet is already connected (silent check)
   async function checkWalletConnected() {
-    if (!window.ethereum) return false;
+    const providers = detectWalletProviders();
+    if (providers.length === 0) return false;
     
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      return accounts.length > 0;
+      // Check all providers for existing connections
+      for (const provider of providers) {
+        try {
+          const accounts = await provider.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            return true;
+          }
+        } catch (e) {
+          console.debug('Error checking provider:', e);
+        }
+      }
+      return false;
     } catch (error) {
       console.error('Error checking wallet connection:', error);
       return false;
     }
   }
 
+  // Show wallet selection UI
+  function showWalletSelector() {
+    return new Promise((resolve, reject) => {
+      const providers = detectWalletProviders();
+      if (providers.length === 0) {
+        return reject(new Error('No Ethereum wallets detected. Please install a wallet like MetaMask.'));
+      }
+      
+      if (providers.length === 1) {
+        return resolve(providers[0]);
+      }
+
+      // Create modal for wallet selection
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      `;
+
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = `
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 400px;
+        max-height: 90vh;
+        overflow-y: auto;
+      `;
+
+      const title = document.createElement('h2');
+      title.textContent = 'Select a Wallet';
+      title.style.marginTop = '0';
+      title.style.color = '#333';
+
+      const closeButton = document.createElement('button');
+      closeButton.textContent = '×';
+      closeButton.style.cssText = `
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #666;
+      `;
+      closeButton.onclick = () => {
+        document.body.removeChild(modal);
+        reject(new Error('User cancelled wallet selection'));
+      };
+
+      const walletList = document.createElement('div');
+      walletList.style.margin = '1.5rem 0';
+
+      // Wallet data with names and icons
+      const walletInfo = {
+        'MetaMask': { icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' },
+        'Trust Wallet': { icon: 'https://cryptologos.cc/logos/trust-wallet-token-twt-logo.png' },
+        'Coinbase Wallet': { icon: 'https://cryptologos.cc/logos/coinbase-wallet-cwallet-logo.png' },
+        'Phantom': { icon: 'https://cryptologos.cc/logos/phantom-protocol-phantom-logo.png' },
+        'default': { icon: 'https://cryptologos.cc/logos/ethereum-eth-logo.png' }
+      };
+
+      // Create wallet buttons
+      providers.forEach((provider, index) => {
+        const walletName = provider.isMetaMask ? 'MetaMask' :
+                         provider.isTrust ? 'Trust Wallet' :
+                         provider.isCoinbaseWallet ? 'Coinbase Wallet' :
+                         provider.isPhantom ? 'Phantom' :
+                         `Wallet ${index + 1}`;
+        
+        const wallet = walletInfo[walletName] || walletInfo.default;
+        
+        const button = document.createElement('button');
+        button.style.cssText = `
+          display: flex;
+          align-items: center;
+          width: 100%;
+          padding: 1rem;
+          margin-bottom: 0.75rem;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          background: white;
+          cursor: pointer;
+          transition: all 0.2s;
+        `;
+        button.onmouseover = () => button.style.borderColor = '#666';
+        button.onmouseout = () => button.style.borderColor = '#e0e0e0';
+        
+        const img = document.createElement('img');
+        img.src = wallet.icon;
+        img.width = 32;
+        img.height = 32;
+        img.style.marginRight = '1rem';
+        
+        const name = document.createElement('span');
+        name.textContent = walletName;
+        name.style.fontSize = '1rem';
+        
+        button.appendChild(img);
+        button.appendChild(name);
+        
+        button.onclick = async () => {
+          button.style.background = '#f0f0f0';
+          document.body.removeChild(modal);
+          resolve(provider);
+        };
+        
+        walletList.appendChild(button);
+      });
+
+      modalContent.appendChild(closeButton);
+      modalContent.appendChild(title);
+      modalContent.appendChild(walletList);
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+    });
+  }
+
   // Connect wallet (to be called on user action)
   async function connectWallet() {
-    if (!window.ethereum) {
-      console.error('No Ethereum provider found');
-      return null;
-    }
-
     try {
+      // Show wallet selector and get the chosen provider
+      const provider = await showWalletSelector();
+      if (!provider) {
+        throw new Error('No wallet provider selected');
+      }
+
+      // Set the selected provider as the active one
+      if (window.ethereum && window.ethereum !== provider) {
+        window.ethereum = provider;
+      }
+
       // Request account access
-      const accounts = await window.ethereum.request({ 
+      const accounts = await provider.request({ 
         method: 'eth_requestAccounts' 
       });
       
@@ -1484,29 +1651,48 @@ if (window.CryptiqueSDK) {
     }
   }
 
-  // Auto-bind to wallet connect button if it exists
+  // Handle wallet connection for a single button element
+  function setupWalletButton(button) {
+    button.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        await connectWallet();
+        // Dispatch custom event on successful connection
+        window.dispatchEvent(new CustomEvent('cryptique:walletConnected', {
+          detail: { 
+            address: sessionData.wallet?.walletAddress,
+            chain: sessionData.wallet?.chainName,
+            element: button // Pass the clicked element for reference
+          }
+        }));
+      } catch (error) {
+        console.error('Wallet connection failed:', error);
+        // Dispatch error event
+        window.dispatchEvent(new CustomEvent('cryptique:walletError', {
+          detail: { 
+            error: error.message,
+            element: button // Pass the clicked element for reference
+          }
+        }));
+      }
+    });
+  }
+
+  // Auto-bind to wallet connect buttons if they exist
   function setupWalletConnectButton() {
-    const connectButton = document.getElementById('walletConnectCQ');
-    if (connectButton) {
-      connectButton.addEventListener('click', async (e) => {
-        e.preventDefault();
-        try {
-          await connectWallet();
-          // Dispatch custom event on successful connection
-          window.dispatchEvent(new CustomEvent('cryptique:walletConnected', {
-            detail: { 
-              address: sessionData.wallet?.walletAddress,
-              chain: sessionData.wallet?.chainName
-            }
-          }));
-        } catch (error) {
-          console.error('Wallet connection failed:', error);
-          // Dispatch error event
-          window.dispatchEvent(new CustomEvent('cryptique:walletError', {
-            detail: { error: error.message }
-          }));
-        }
-      });
+    // Check for ID first
+    const connectButtonById = document.getElementById('walletConnectCQ');
+    if (connectButtonById) {
+      setupWalletButton(connectButtonById);
+    }
+
+    // Then check for class
+    const connectButtonsByClass = document.getElementsByClassName('walletConnectCQ');
+    for (const button of connectButtonsByClass) {
+      // Skip if this is the same element we already added by ID
+      if (button !== connectButtonById) {
+        setupWalletButton(button);
+      }
     }
   }
 
