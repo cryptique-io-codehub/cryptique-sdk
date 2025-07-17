@@ -931,11 +931,37 @@ if (window.CryptiqueSDK) {
 
   // Connect wallet (to be called on user action)
   async function connectWallet() {
-    if (!window.ethereum) {
-      throw new Error('No Ethereum provider found');
-    }
-
     try {
+      // If Web3Modal is available, use it
+      if (window.web3Modal) {
+        const provider = await window.web3Modal.connect();
+        const web3 = new Web3(provider);
+        const accounts = await web3.eth.getAccounts();
+        
+        if (accounts.length > 0) {
+          const chainId = await web3.eth.getChainId();
+          const chainName = getChainNameFromId(chainId);
+          
+          // Update session data
+          sessionData.wallet = {
+            walletAddress: accounts[0],
+            walletType: 'WalletConnect',
+            chainName: chainName,
+            chainId: chainId
+          };
+          
+          sessionData.isWeb3User = true;
+          sessionData.walletConnected = true;
+          
+          return accounts[0];
+        }
+      }
+      
+      // Fallback to traditional web3 providers
+      if (!window.ethereum) {
+        throw new Error('No Ethereum provider found');
+      }
+
       // Request account access
       const accounts = await window.ethereum.request({ 
         method: 'eth_requestAccounts' 
@@ -946,6 +972,7 @@ if (window.CryptiqueSDK) {
         await updateWalletInfo();
         return accounts[0];
       }
+      
       throw new Error('No accounts found');
     } catch (error) {
       console.error('Error connecting wallet:', error);
@@ -1643,42 +1670,143 @@ if (window.CryptiqueSDK) {
     return wallets;
   }
 
+  // Initialize Web3Modal with WalletConnect
+  async function initWeb3Modal() {
+    // Only load Web3Modal if not already loaded
+    if (window.Web3Modal) return;
+    
+    // Load required scripts
+    await loadScript('https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
+    await loadScript('https://unpkg.com/web3modal@1.9.10/dist/index.js');
+    
+    // Configure Web3Modal
+    const providerOptions = {
+      walletconnect: {
+        package: window.WalletConnectProvider.default,
+        options: {
+          // Replace with your project ID from https://cloud.walletconnect.com/
+          projectId: 'YOUR_WALLETCONNECT_PROJECT_ID',
+          // Optional - Additional options for WalletConnect
+          rpc: {
+            1: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY',
+            56: 'https://bsc-dataseed.binance.org/',
+            137: 'https://polygon-rpc.com/',
+            // Add other networks as needed
+          },
+          // Optional - Custom RPC methods
+          methods: ['eth_sendTransaction', 'personal_sign'],
+          // Optional - ChainId to use for signing
+          chainId: 1, // Default to Ethereum Mainnet
+        }
+      },
+      // Add other wallet providers as needed
+      // Example for Metamask
+      injected: {
+        display: {
+          name: 'Browser Wallet',
+          description: 'Connect with browser extension (MetaMask, etc.)',
+        },
+        package: null,
+      },
+    };
+    
+    // Initialize Web3Modal
+    window.web3Modal = new Web3Modal.default({
+      cacheProvider: true, // Optional - Enable cache provider
+      providerOptions, // Required - Provider options
+      theme: 'dark', // Optional - Theme ('dark' or 'light')
+      disableInjectedProvider: false, // Optional - Disable injected providers
+    });
+  }
+
+  // Helper function to load scripts
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = (error) => reject(error);
+      document.head.appendChild(script);
+    });
+  }
+
   // Handle wallet connection for a single button element
   async function setupWalletButton(button) {
     button.addEventListener('click', async (e) => {
       e.preventDefault();
       
       try {
-        // Get list of installed wallets
-        const wallets = getInstalledWallets();
+        // Initialize Web3Modal
+        await initWeb3Modal();
         
-        if (wallets.length === 0) {
-          throw new Error('No Ethereum wallets detected');
+        // Connect to the wallet
+        const web3Modal = window.web3Modal;
+        const provider = await web3Modal.connect();
+        
+        // Initialize Web3
+        const web3 = new Web3(provider);
+        
+        // Get accounts
+        const accounts = await web3.eth.getAccounts();
+        
+        if (accounts.length === 0) {
+          throw new Error('No accounts found');
         }
         
-        // If only one wallet, connect directly
-        let selectedWallet = wallets[0];
+        // Get network ID
+        const chainId = await web3.eth.getChainId();
+        const chainName = getChainNameFromId(chainId);
         
-        // If multiple wallets, show selector
-        if (wallets.length > 1) {
-          selectedWallet = await showWalletSelector(wallets);
-          if (!selectedWallet) return; // User cancelled
-        }
+        // Update session data
+        sessionData.wallet = {
+          walletAddress: accounts[0],
+          walletType: 'WalletConnect',
+          chainName: chainName,
+          chainId: chainId
+        };
         
-        // Connect with selected wallet
-        const account = await connectWallet();
+        sessionData.isWeb3User = true;
+        sessionData.walletConnected = true;
         
-        if (account) {
-          // Dispatch custom event on successful connection
-          window.dispatchEvent(new CustomEvent('cryptique:walletConnected', {
-            detail: { 
-              address: sessionData.wallet?.walletAddress,
-              chain: sessionData.wallet?.chainName,
-              wallet: selectedWallet,
-              element: button
-            }
+        // Set up event listeners for account/chain changes
+        provider.on('accountsChanged', (accounts) => {
+          if (accounts.length === 0) {
+            // Handle account disconnection
+            sessionData.wallet.walletAddress = '';
+            sessionData.walletConnected = false;
+          } else {
+            sessionData.wallet.walletAddress = accounts[0];
+          }
+          window.dispatchEvent(new CustomEvent('cryptique:accountsChanged', { 
+            detail: { accounts } 
           }));
-        }
+        });
+        
+        provider.on('chainChanged', (chainId) => {
+          const newChainId = parseInt(chainId, 16);
+          sessionData.wallet.chainId = newChainId;
+          sessionData.wallet.chainName = getChainNameFromId(newChainId);
+          window.dispatchEvent(new CustomEvent('cryptique:chainChanged', { 
+            detail: { 
+              chainId: newChainId,
+              chainName: sessionData.wallet.chainName
+            } 
+          }));
+        });
+        
+        // Dispatch success event
+        window.dispatchEvent(new CustomEvent('cryptique:walletConnected', {
+          detail: { 
+            address: accounts[0],
+            chain: chainName,
+            chainId: chainId,
+            provider: 'WalletConnect',
+            element: button,
+            web3: web3 // Pass web3 instance for convenience
+          }
+        }));
+        
+        return accounts[0];
       } catch (error) {
         console.error('Wallet connection failed:', error);
         // Dispatch error event
@@ -1688,12 +1816,16 @@ if (window.CryptiqueSDK) {
             element: button
           }
         }));
+        throw error;
       }
     });
   }
 
   // Auto-bind to wallet connect buttons if they exist
   function setupWalletConnectButton() {
+    // Initialize Web3Modal in the background
+    initWeb3Modal().catch(console.error);
+    
     // Check for ID first
     const connectButtonById = document.getElementById('walletConnectCQ');
     if (connectButtonById) {
