@@ -916,19 +916,73 @@ if (window.CryptiqueSDK) {
     }
   });
 
+  // Check if wallet is already connected (silent check)
+  async function checkWalletConnected() {
+    if (!window.ethereum) return false;
+    
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      return accounts.length > 0;
+    } catch (error) {
+      console.error('Error checking wallet connection:', error);
+      return false;
+    }
+  }
+
+  // Connect wallet (to be called on user action)
+  async function connectWallet() {
+    if (!window.ethereum) {
+      console.error('No Ethereum provider found');
+      return null;
+    }
+
+    try {
+      // Request account access
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      
+      if (accounts.length > 0) {
+        // Update wallet info after successful connection
+        await updateWalletInfo();
+        return accounts[0];
+      }
+      return null;
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+      throw error;
+    }
+  }
+
   function setupWalletTracking() {
     if (window.ethereum) {
-      // Change from eth_requestAccounts to eth_accounts to avoid prompting the user
-      window.ethereum
-        .request({ method: "eth_accounts" })
-        .then((accounts) => {
-          if (accounts.length > 0) {
-            userSession.walletAddresses = accounts;
-          }
-        })
-        .catch(error => {
-          console.log("Error getting accounts:", error);
-        });
+      // Initial silent check for connected accounts
+      checkWalletConnected().then(isConnected => {
+        if (isConnected) {
+          updateWalletInfo();
+        }
+      });
+
+      // Listen for account changes
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length > 0) {
+          updateWalletInfo();
+        } else {
+          // Wallet disconnected
+          sessionData.wallet = {
+            walletAddress: "No Wallet Connected",
+            walletType: detectWalletType(),
+            chainName: "Not Connected"
+          };
+          sessionData.walletConnected = false;
+          userSession.walletConnected = false;
+        }
+      });
+
+      // Listen for chain changes
+      window.ethereum.on('chainChanged', () => {
+        updateWalletInfo();
+      });
     }
   }
   function detectWallets() {
@@ -1306,6 +1360,13 @@ if (window.CryptiqueSDK) {
     }, 500);
   }
 
+  // Initialize wallet connect button
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupWalletConnectButton);
+  } else {
+    setupWalletConnectButton();
+  }
+
   // Start Analytics as soon as possible
   try {
     // Start geolocation immediately to give it time
@@ -1423,10 +1484,38 @@ if (window.CryptiqueSDK) {
     }
   }
 
+  // Auto-bind to wallet connect button if it exists
+  function setupWalletConnectButton() {
+    const connectButton = document.getElementById('walletConnectCQ');
+    if (connectButton) {
+      connectButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await connectWallet();
+          // Dispatch custom event on successful connection
+          window.dispatchEvent(new CustomEvent('cryptique:walletConnected', {
+            detail: { 
+              address: sessionData.wallet?.walletAddress,
+              chain: sessionData.wallet?.chainName
+            }
+          }));
+        } catch (error) {
+          console.error('Wallet connection failed:', error);
+          // Dispatch error event
+          window.dispatchEvent(new CustomEvent('cryptique:walletError', {
+            detail: { error: error.message }
+          }));
+        }
+      });
+    }
+  }
+
   // Add the SDK to the window object for external access
   window.CryptiqueSDK = {
     ...window.CryptiqueSDK,
     version: VERSION,
+    connectWallet, // Expose connectWallet function for external use
+    isWalletConnected: checkWalletConnected, // Expose connection check
     trackEvent: trackEvent,
     setTrackingConsent: setTrackingConsent,
     getTrackingConsent: getTrackingConsent,
