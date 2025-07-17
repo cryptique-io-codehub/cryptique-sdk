@@ -1670,44 +1670,65 @@ if (window.CryptiqueSDK) {
     return wallets;
   }
 
-  // Initialize Web3Modal with WalletConnect
+  // Initialize Web3Modal with WalletConnect v2
   async function initWeb3Modal() {
     // Only load Web3Modal if not already loaded
-    if (window.Web3Modal) return;
+    if (window.web3Modal) return;
     
-    // Load required scripts
-    await loadScript('https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js');
-    await loadScript('https://unpkg.com/web3modal@1.9.10/dist/index.js');
-    
-    // Configure Web3Modal
-    const providerOptions = {
-      walletconnect: {
-        package: window.WalletConnectProvider.default,
-        options: {
-          // Replace with your project ID from https://cloud.walletconnect.com/
-          projectId: 'YOUR_WALLETCONNECT_PROJECT_ID',
-          // Optional - Additional options for WalletConnect
-          rpc: {
-            1: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY',
-            56: 'https://bsc-dataseed.binance.org/',
-            137: 'https://polygon-rpc.com/',
-            // Add other networks as needed
-          },
-          // Optional - Custom RPC methods
-          methods: ['eth_sendTransaction', 'personal_sign'],
-          // Optional - ChainId to use for signing
-          chainId: 1, // Default to Ethereum Mainnet
-        }
-      },
-      // Injected provider is now disabled to only show WalletConnect
-    };
-    
-    // Initialize Web3Modal
-    window.web3Modal = new Web3Modal.default({
-      cacheProvider: true, // Optional - Enable cache provider
-      providerOptions, // Required - Provider options
-      theme: 'dark', // Optional - Theme ('dark' or 'light')
-      disableInjectedProvider: true, // Set to true to hide browser wallets
+    // Load required scripts for Web3Modal v2
+    await loadScript('https://unpkg.com/@web3modal/ethereum@^2.7.1/dist/cdn/bundle.js');
+    await loadScript('https://unpkg.com/@walletconnect/ethereum-provider@^2.9.0/dist/cdn/bundle.js');
+
+    const projectId = 'ed2fd8c26a6ef22a6c90a4f060e4addf';
+
+    // 2. Configure ethereum provider
+    const mainnet = {
+      chainId: 1,
+      name: 'Ethereum',
+      currency: 'ETH',
+      explorerUrl: 'https://etherscan.io',
+      rpcUrl: 'https://cloudflare-eth.com/'
+    }
+
+    const polygon = {
+      chainId: 137,
+      name: 'Polygon',
+      currency: 'MATIC',
+      explorerUrl: 'https://polygonscan.com',
+      rpcUrl: 'https://polygon-rpc.com/'
+    }
+
+    const arbitrum = {
+      chainId: 42161,
+      name: 'Arbitrum',
+      currency: 'ETH',
+      explorerUrl: 'https://arbiscan.io',
+      rpcUrl: 'https://arb1.arbitrum.io/rpc'
+    }
+
+    const metadata = {
+      name: 'Cryptique SDK',
+      description: 'Connect with Cryptique',
+      url: 'https://cryptique.io/',
+      icons: ['https://cryptique.io/favicon.ico']
+    }
+
+    const ethereumProvider = new window.WalletConnectEthereumProvider.EthereumProvider({
+      projectId,
+      chains: [1],
+      optionalChains: [137, 42161],
+      showQrModal: true,
+      metadata,
+      qrModalOptions: {
+        themeMode: 'dark',
+        explorerRecommendedWalletIds: 'NONE' // Show all wallets
+      }
+    });
+
+    // 4. Create a Web3Modal instance
+    window.web3Modal = new window.Web3ModalEthereum.Web3Modal({
+      projectId,
+      ethereumProvider
     });
   }
 
@@ -1731,9 +1752,13 @@ if (window.CryptiqueSDK) {
         // Initialize Web3Modal
         await initWeb3Modal();
         
-        // Connect to the wallet
-        const web3Modal = window.web3Modal;
-        const provider = await web3Modal.connect();
+        // Open the WalletConnect modal
+        await window.web3Modal.openModal();
+        const provider = window.web3Modal.getWalletProvider();
+
+        if (!provider) {
+          throw new Error('No provider selected');
+        }
         
         // Initialize Web3
         const web3 = new Web3(provider);
