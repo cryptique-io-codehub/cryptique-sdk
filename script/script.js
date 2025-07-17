@@ -1736,6 +1736,7 @@ if (window.CryptiqueSDK) {
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
+      script.type = 'module'; // <-- Important: Load as a module
       script.src = src;
       script.onload = () => resolve();
       script.onerror = (error) => reject(error);
