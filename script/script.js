@@ -933,21 +933,175 @@ if (window.CryptiqueSDK) {
   async function connectWallet() {
     if (!window.ethereum) {
       console.error('No Ethereum provider found');
-      return null;
+      throw new Error('No Ethereum provider found');
     }
 
     try {
-      // Request account access
+      // First, request account access
       const accounts = await window.ethereum.request({ 
         method: 'eth_requestAccounts' 
       });
       
-      if (accounts.length > 0) {
-        // Update wallet info after successful connection
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found');
+      }
+      
+      // If only one account, use it directly
+      if (accounts.length === 1) {
         await updateWalletInfo();
         return accounts[0];
       }
-      return null;
+      
+      // If multiple accounts, show a selection UI
+      return new Promise((resolve, reject) => {
+        try {
+          // Create modal container
+          const modal = document.createElement('div');
+          modal.style.position = 'fixed';
+          modal.style.top = '0';
+          modal.style.left = '0';
+          modal.style.width = '100%';
+          modal.style.height = '100%';
+          modal.style.backgroundColor = 'rgba(0,0,0,0.7)';
+          modal.style.display = 'flex';
+          modal.style.justifyContent = 'center';
+          modal.style.alignItems = 'center';
+          modal.style.zIndex = '9999';
+          
+          // Create modal content
+          const content = document.createElement('div');
+          content.style.backgroundColor = '#1e1e1e';
+          content.style.padding = '20px';
+          content.style.borderRadius = '10px';
+          content.style.width = '90%';
+          content.style.maxWidth = '400px';
+          content.style.maxHeight = '80vh';
+          content.style.overflowY = 'auto';
+          
+          // Add title
+          const title = document.createElement('h3');
+          title.textContent = 'Select Account to Connect';
+          title.style.color = '#fff';
+          title.style.marginTop = '0';
+          content.appendChild(title);
+          
+          // Add account list
+          const accountList = document.createElement('div');
+          accountList.style.marginBottom = '20px';
+          
+          accounts.forEach((account, index) => {
+            const accountDiv = document.createElement('div');
+            accountDiv.style.padding = '10px';
+            accountDiv.style.margin = '5px 0';
+            accountDiv.style.backgroundColor = '#2d2d2d';
+            accountDiv.style.borderRadius = '5px';
+            accountDiv.style.cursor = 'pointer';
+            accountDiv.style.display = 'flex';
+            accountDiv.style.alignItems = 'center';
+            accountDiv.style.gap = '10px';
+            accountDiv.onmouseover = () => accountDiv.style.backgroundColor = '#3a3a3a';
+            accountDiv.onmouseout = () => accountDiv.style.backgroundColor = '#2d2d2d';
+            
+            // Add account icon
+            const icon = document.createElement('div');
+            icon.textContent = '👛';
+            
+            // Format account address
+            const address = document.createElement('div');
+            address.textContent = `${account.slice(0, 6)}...${account.slice(-4)}`;
+            address.style.fontFamily = 'monospace';
+            address.style.color = '#fff';
+            
+            // Add balance (optional - requires additional RPC calls)
+            const balance = document.createElement('div');
+            balance.textContent = '...';
+            balance.style.fontSize = '0.8em';
+            balance.style.color = '#aaa';
+            
+            accountDiv.appendChild(icon);
+            accountDiv.appendChild(address);
+            accountDiv.appendChild(balance);
+            
+            // Add click handler
+            accountDiv.onclick = async () => {
+              try {
+                // Update UI to show loading
+                accountDiv.innerHTML = 'Connecting...';
+                
+                // Update the selected account
+                await window.ethereum.request({
+                  method: 'wallet_requestPermissions',
+                  params: [{
+                    eth_accounts: {}
+                  }]
+                });
+                
+                // Update wallet info
+                await updateWalletInfo();
+                
+                // Clean up
+                document.body.removeChild(modal);
+                resolve(account);
+              } catch (error) {
+                console.error('Error switching account:', error);
+                reject(error);
+              }
+            };
+            
+            accountList.appendChild(accountDiv);
+            
+            // Optional: Fetch and display balance (uncomment if you want to show balances)
+            // (async () => {
+            //   try {
+            //     const balance = await window.ethereum.request({
+            //       method: 'eth_getBalance',
+            //       params: [account, 'latest']
+            //     });
+            //     const etherBalance = parseFloat(web3.utils.fromWei(balance, 'ether')).toFixed(4);
+            //     balance.textContent = `${etherBalance} ETH`;
+            //   } catch (e) {
+            //     console.error('Error fetching balance:', e);
+            //     balance.textContent = 'Balance N/A';
+            //   }
+            // })();
+          });
+          
+          content.appendChild(accountList);
+          
+          // Add cancel button
+          const cancelBtn = document.createElement('button');
+          cancelBtn.textContent = 'Cancel';
+          cancelBtn.style.padding = '8px 16px';
+          cancelBtn.style.backgroundColor = '#ff4d4f';
+          cancelBtn.style.color = 'white';
+          cancelBtn.style.border = 'none';
+          cancelBtn.style.borderRadius = '4px';
+          cancelBtn.style.cursor = 'pointer';
+          cancelBtn.onmouseover = () => cancelBtn.style.opacity = '0.8';
+          cancelBtn.onmouseout = () => cancelBtn.style.opacity = '1';
+          cancelBtn.onclick = () => {
+            document.body.removeChild(modal);
+            reject(new Error('User cancelled account selection'));
+          };
+          
+          content.appendChild(cancelBtn);
+          modal.appendChild(content);
+          document.body.appendChild(modal);
+          
+          // Close modal when clicking outside
+          modal.onclick = (e) => {
+            if (e.target === modal) {
+              document.body.removeChild(modal);
+              reject(new Error('User cancelled account selection'));
+            }
+          };
+          
+        } catch (error) {
+          console.error('Error creating account selection UI:', error);
+          reject(error);
+        }
+      });
+      
     } catch (error) {
       console.error('Error connecting wallet:', error);
       throw error;
