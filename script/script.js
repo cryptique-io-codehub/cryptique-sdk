@@ -17,6 +17,20 @@ if (window.CryptiqueSDK) {
   let timer;
   let countryName;
 
+  // EIP-6963: Store for discovered wallet providers
+  const eip6963Providers = [];
+
+  // EIP-6963: Listen for providers being announced
+  window.addEventListener("eip6963:announceProvider", (event) => {
+    // event.detail contains the provider info (info, provider)
+    if (!eip6963Providers.some(p => p.info.uuid === event.detail.info.uuid)) {
+        eip6963Providers.push(event.detail);
+    }
+  });
+
+  // EIP-6963: Dispatch event to request providers
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+
   // 🚀 Utility Functions
   function generateSessionId() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -929,182 +943,93 @@ if (window.CryptiqueSDK) {
     }
   }
 
-  // Connect wallet (to be called on user action)
-  async function connectWallet() {
-    if (!window.ethereum) {
-      console.error('No Ethereum provider found');
-      throw new Error('No Ethereum provider found');
-    }
+  // Connect to a specific provider
+  async function connectWithProvider(provider) {
+      try {
+          const accounts = await provider.request({ method: 'eth_requestAccounts' });
+          if (!accounts || accounts.length === 0) {
+              throw new Error('No accounts returned from wallet.');
+          }
+          // Set this provider as the main `window.ethereum` for the session for other functions to use
+          window.ethereum = provider;
+          await updateWalletInfo();
+          return accounts[0];
+      } catch (error) {
+          console.error('Error connecting with selected provider:', error);
+          throw error;
+      }
+  }
 
-    try {
-      // First, request account access
-      const accounts = await window.ethereum.request({ 
-        method: 'eth_requestAccounts' 
-      });
-      
-      if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts found');
-      }
-      
-      // If only one account, use it directly
-      if (accounts.length === 1) {
-        await updateWalletInfo();
-        return accounts[0];
-      }
-      
-      // If multiple accounts, show a selection UI
+  // Show a modal to select a wallet from multiple providers
+  function showWalletSelectionModal(providers) {
       return new Promise((resolve, reject) => {
-        try {
-          // Create modal container
           const modal = document.createElement('div');
-          modal.style.position = 'fixed';
-          modal.style.top = '0';
-          modal.style.left = '0';
-          modal.style.width = '100%';
-          modal.style.height = '100%';
-          modal.style.backgroundColor = 'rgba(0,0,0,0.7)';
-          modal.style.display = 'flex';
-          modal.style.justifyContent = 'center';
-          modal.style.alignItems = 'center';
-          modal.style.zIndex = '9999';
-          
-          // Create modal content
+          // ... (styling for modal) ...
+          modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; justify-content:center; align-items:center; z-index:10000;';
+
           const content = document.createElement('div');
-          content.style.backgroundColor = '#1e1e1e';
-          content.style.padding = '20px';
-          content.style.borderRadius = '10px';
-          content.style.width = '90%';
-          content.style.maxWidth = '400px';
-          content.style.maxHeight = '80vh';
-          content.style.overflowY = 'auto';
-          
-          // Add title
+          content.style.cssText = 'background:#1e1e1e; padding:20px; border-radius:12px; width:90%; max-width:400px;';
+
           const title = document.createElement('h3');
-          title.textContent = 'Select Account to Connect';
-          title.style.color = '#fff';
-          title.style.marginTop = '0';
+          title.textContent = 'Choose your wallet';
+          title.style.cssText = 'color:white; margin-top:0;';
           content.appendChild(title);
-          
-          // Add account list
-          const accountList = document.createElement('div');
-          accountList.style.marginBottom = '20px';
-          
-          accounts.forEach((account, index) => {
-            const accountDiv = document.createElement('div');
-            accountDiv.style.padding = '10px';
-            accountDiv.style.margin = '5px 0';
-            accountDiv.style.backgroundColor = '#2d2d2d';
-            accountDiv.style.borderRadius = '5px';
-            accountDiv.style.cursor = 'pointer';
-            accountDiv.style.display = 'flex';
-            accountDiv.style.alignItems = 'center';
-            accountDiv.style.gap = '10px';
-            accountDiv.onmouseover = () => accountDiv.style.backgroundColor = '#3a3a3a';
-            accountDiv.onmouseout = () => accountDiv.style.backgroundColor = '#2d2d2d';
-            
-            // Add account icon
-            const icon = document.createElement('div');
-            icon.textContent = '👛';
-            
-            // Format account address
-            const address = document.createElement('div');
-            address.textContent = `${account.slice(0, 6)}...${account.slice(-4)}`;
-            address.style.fontFamily = 'monospace';
-            address.style.color = '#fff';
-            
-            // Add balance (optional - requires additional RPC calls)
-            const balance = document.createElement('div');
-            balance.textContent = '...';
-            balance.style.fontSize = '0.8em';
-            balance.style.color = '#aaa';
-            
-            accountDiv.appendChild(icon);
-            accountDiv.appendChild(address);
-            accountDiv.appendChild(balance);
-            
-            // Add click handler
-            accountDiv.onclick = async () => {
-              try {
-                // Update UI to show loading
-                accountDiv.innerHTML = 'Connecting...';
-                
-                // Update the selected account
-                await window.ethereum.request({
-                  method: 'wallet_requestPermissions',
-                  params: [{
-                    eth_accounts: {}
-                  }]
-                });
-                
-                // Update wallet info
-                await updateWalletInfo();
-                
-                // Clean up
-                document.body.removeChild(modal);
-                resolve(account);
-              } catch (error) {
-                console.error('Error switching account:', error);
-                reject(error);
-              }
-            };
-            
-            accountList.appendChild(accountDiv);
-            
-            // Optional: Fetch and display balance (uncomment if you want to show balances)
-            // (async () => {
-            //   try {
-            //     const balance = await window.ethereum.request({
-            //       method: 'eth_getBalance',
-            //       params: [account, 'latest']
-            //     });
-            //     const etherBalance = parseFloat(web3.utils.fromWei(balance, 'ether')).toFixed(4);
-            //     balance.textContent = `${etherBalance} ETH`;
-            //   } catch (e) {
-            //     console.error('Error fetching balance:', e);
-            //     balance.textContent = 'Balance N/A';
-            //   }
-            // })();
+
+          providers.forEach(providerDetail => {
+              const btn = document.createElement('button');
+              btn.style.cssText = 'width:100%; padding:12px; margin:8px 0; background:#2d2d2d; color:white; border:1px solid #444; border-radius:8px; display:flex; align-items:center; gap:12px; cursor:pointer;';
+              
+              const icon = document.createElement('img');
+              icon.src = providerDetail.info.icon;
+              icon.style.cssText = 'width:24px; height:24px;';
+              btn.appendChild(icon);
+
+              const name = document.createElement('span');
+              name.textContent = providerDetail.info.name;
+              btn.appendChild(name);
+
+              btn.onclick = () => {
+                  document.body.removeChild(modal);
+                  resolve(providerDetail.provider);
+              };
+              content.appendChild(btn);
           });
-          
-          content.appendChild(accountList);
-          
-          // Add cancel button
-          const cancelBtn = document.createElement('button');
-          cancelBtn.textContent = 'Cancel';
-          cancelBtn.style.padding = '8px 16px';
-          cancelBtn.style.backgroundColor = '#ff4d4f';
-          cancelBtn.style.color = 'white';
-          cancelBtn.style.border = 'none';
-          cancelBtn.style.borderRadius = '4px';
-          cancelBtn.style.cursor = 'pointer';
-          cancelBtn.onmouseover = () => cancelBtn.style.opacity = '0.8';
-          cancelBtn.onmouseout = () => cancelBtn.style.opacity = '1';
-          cancelBtn.onclick = () => {
-            document.body.removeChild(modal);
-            reject(new Error('User cancelled account selection'));
-          };
-          
-          content.appendChild(cancelBtn);
+
           modal.appendChild(content);
           document.body.appendChild(modal);
-          
-          // Close modal when clicking outside
+
           modal.onclick = (e) => {
-            if (e.target === modal) {
-              document.body.removeChild(modal);
-              reject(new Error('User cancelled account selection'));
-            }
+              if (e.target === modal) {
+                  document.body.removeChild(modal);
+                  reject(new Error('User cancelled wallet selection.'));
+              }
           };
-          
-        } catch (error) {
-          console.error('Error creating account selection UI:', error);
-          reject(error);
-        }
       });
-      
+  }
+
+  // Connect wallet (to be called on user action)
+  async function connectWallet() {
+    // Use a brief timeout to allow all providers to be announced
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const providersToUse = eip6963Providers.length > 0 ? eip6963Providers : (window.ethereum ? [{ info: { name: 'Default Wallet', icon: '' }, provider: window.ethereum }] : []);
+
+    if (providersToUse.length === 0) {
+        console.error('No wallet provider found.');
+        throw new Error('No wallet provider found.');
+    }
+
+    if (providersToUse.length === 1) {
+        return connectWithProvider(providersToUse[0].provider);
+    }
+
+    // Multiple providers found, show selection modal
+    try {
+        const selectedProvider = await showWalletSelectionModal(providersToUse);
+        return connectWithProvider(selectedProvider);
     } catch (error) {
-      console.error('Error connecting wallet:', error);
-      throw error;
+        console.log(error.message); // Log cancellation message without stack trace
+        throw error; // Re-throw for the caller to handle
     }
   }
 
